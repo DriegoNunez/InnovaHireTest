@@ -1,0 +1,259 @@
+'use client';
+
+import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { Header } from '@/components/layout/Header';
+import { Badge, StatusBadge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Table } from '@/components/ui/Table';
+import { api } from '@/lib/api';
+import {
+  DIFFICULTIES,
+  EXPERIENCE_LEVELS,
+  QUESTION_TYPES,
+} from '@/components/admin/QuestionForm';
+import type { Question, QuestionFilters } from '@/types';
+
+const demoQuestions: Question[] = [
+  {
+    id: 'demo-1',
+    category: 'ASCE 7 Loading',
+    categoryName: 'ASCE 7 Loading',
+    text: 'For a low-rise office building, which ASCE 7 load type is most directly associated with lateral force resisting system design?',
+    type: 'multiple_choice_single',
+    difficulty: 'level2',
+    experienceLevel: 'entry_level',
+    status: 'published',
+    points: 8,
+    tags: ['ASCE 7', 'lateral loads'],
+    isActive: true,
+    createdAt: '2026-05-20T10:00:00Z',
+    updatedAt: '2026-05-20T10:00:00Z',
+    createdBy: 'Admin',
+  },
+  {
+    id: 'demo-2',
+    category: 'Steel Design',
+    categoryName: 'Steel Design',
+    text: 'Describe the LRFD factored moment check for a simply supported W-shape beam with uniform dead and live load.',
+    type: 'calculation_problem',
+    difficulty: 'level3',
+    experienceLevel: 'pe',
+    status: 'published',
+    points: 15,
+    tags: ['steel', 'LRFD'],
+    isActive: true,
+    createdAt: '2026-05-19T10:00:00Z',
+    updatedAt: '2026-05-19T10:00:00Z',
+    createdBy: 'Admin',
+  },
+  {
+    id: 'demo-3',
+    category: 'Concrete Design',
+    categoryName: 'Concrete Design',
+    text: 'Outline the checks you would perform for a reinforced concrete shear wall boundary element in a high seismic demand region.',
+    type: 'structural_design',
+    difficulty: 'level4',
+    experienceLevel: 'pe',
+    status: 'draft',
+    points: 25,
+    tags: ['concrete', 'seismic'],
+    isActive: false,
+    createdAt: '2026-05-18T10:00:00Z',
+    updatedAt: '2026-05-18T10:00:00Z',
+    createdBy: 'Admin',
+  },
+];
+
+const labelFor = (options: { value: string; label: string }[], value?: string) =>
+  options.find((option) => option.value === value)?.label || value || '';
+
+const difficultyVariant = (difficulty: Question['difficulty']) => {
+  if (difficulty === 'level1' || difficulty === 'level2' || difficulty === 'easy') return 'success' as const;
+  if (difficulty === 'level3' || difficulty === 'medium') return 'warning' as const;
+  return 'danger' as const;
+};
+
+export default function QuestionsPage() {
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [filters, setFilters] = useState<QuestionFilters>({ page: 1, limit: 10 });
+
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      setLoading(true);
+      try {
+        const response = await api.getQuestions(filters);
+        setQuestions(response.data);
+        setTotalPages(response.totalPages);
+        setTotal(response.total);
+      } catch {
+        setQuestions(demoQuestions);
+        setTotal(demoQuestions.length);
+        setTotalPages(1);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQuestions();
+  }, [filters]);
+
+  const stats = useMemo(() => {
+    const published = questions.filter((question) => question.status === 'published' || question.isActive).length;
+    const subjective = questions.filter((question) => (question.rubric || []).length > 0 || !['multiple_choice_single', 'multiple_choice_multiple', 'true_false'].includes(question.type)).length;
+
+    return {
+      published,
+      draft: questions.length - published,
+      subjective,
+    };
+  }, [questions]);
+
+  const columns = [
+    {
+      key: 'text',
+      header: 'Question',
+      sortable: true,
+      render: (question: Question) => (
+        <div className="admin-table-question">
+          <Link href={`/admin/questions/${question.id}`}>
+            {question.text.length > 110 ? `${question.text.substring(0, 110)}...` : question.text}
+          </Link>
+          <div>
+            {(question.tags || []).slice(0, 3).map((tag) => (
+              <span key={tag} className="tag">{tag}</span>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      sortable: true,
+      render: (question: Question) => <span className="admin-muted-cell">{question.categoryName || question.category}</span>,
+    },
+    {
+      key: 'type',
+      header: 'Type',
+      sortable: true,
+      render: (question: Question) => <Badge variant="blue">{labelFor(QUESTION_TYPES, question.type)}</Badge>,
+    },
+    {
+      key: 'experienceLevel',
+      header: 'Level',
+      sortable: true,
+      render: (question: Question) => <span className="admin-muted-cell">{labelFor(EXPERIENCE_LEVELS, question.experienceLevel)}</span>,
+    },
+    {
+      key: 'difficulty',
+      header: 'Difficulty',
+      sortable: true,
+      render: (question: Question) => (
+        <Badge variant={difficultyVariant(question.difficulty)}>
+          {labelFor(DIFFICULTIES, question.difficulty)}
+        </Badge>
+      ),
+    },
+    {
+      key: 'points',
+      header: 'Points',
+      sortable: true,
+      render: (question: Question) => <span style={{ fontWeight: 700 }}>{question.points}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (question: Question) => (
+        <StatusBadge status={question.status === 'published' || question.isActive ? 'active' : 'inactive'} />
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: '120px',
+      render: (question: Question) => (
+        <div className="table-actions">
+          <Link href={`/admin/questions/${question.id}`}>
+            <Button variant="ghost" size="sm">Edit</Button>
+          </Link>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <Header
+        title="Question Bank"
+        breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Questions' }]}
+        actions={
+          <Link href="/admin/questions/new">
+            <Button variant="primary">New Question</Button>
+          </Link>
+        }
+      />
+      <div className="page-content">
+        <div className="admin-summary-strip">
+          <div>
+            <span>{total}</span>
+            <label>Total Questions</label>
+          </div>
+          <div>
+            <span>{stats.published}</span>
+            <label>Published</label>
+          </div>
+          <div>
+            <span>{stats.draft}</span>
+            <label>Draft or Archived</label>
+          </div>
+          <div>
+            <span>{stats.subjective}</span>
+            <label>Rubric Based</label>
+          </div>
+        </div>
+
+        <div className="filter-bar">
+          <div className="search-input-wrapper">
+            <Input
+              className="search-input"
+              placeholder="Search structural questions..."
+              value={filters.search || ''}
+              onChange={(event) => setFilters({ ...filters, search: event.target.value, page: 1 })}
+            />
+          </div>
+          <Select
+            options={QUESTION_TYPES}
+            placeholder="All Types"
+            value={filters.type || ''}
+            onChange={(event) => setFilters({ ...filters, type: event.target.value as QuestionFilters['type'], page: 1 })}
+          />
+          <Select
+            options={DIFFICULTIES}
+            placeholder="All Difficulties"
+            value={filters.difficulty || ''}
+            onChange={(event) => setFilters({ ...filters, difficulty: event.target.value as QuestionFilters['difficulty'], page: 1 })}
+          />
+        </div>
+
+        <Table
+          columns={columns}
+          data={questions}
+          keyExtractor={(question) => question.id}
+          isLoading={loading}
+          emptyMessage="No questions found. Create the first structural engineering question."
+          emptyIcon="?"
+          currentPage={filters.page || 1}
+          totalPages={totalPages}
+          totalItems={total}
+          onPageChange={(page) => setFilters({ ...filters, page })}
+        />
+      </div>
+    </>
+  );
+}
