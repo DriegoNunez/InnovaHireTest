@@ -141,9 +141,13 @@ public class QuestionService : IQuestionService
         question.Status = request.Status;
         question.UpdatedAt = DateTime.UtcNow;
 
-        // Replace options
-        _context.QuestionOptions.RemoveRange(question.Options);
-        question.Options = request.Options.Select(o => new QuestionOption
+        var existingOptions = question.Options.ToList();
+        var existingRubrics = question.Rubrics.ToList();
+
+        _context.QuestionOptions.RemoveRange(existingOptions);
+        _context.QuestionRubrics.RemoveRange(existingRubrics);
+
+        var nextOptions = request.Options.Select(o => new QuestionOption
         {
             Id = Guid.NewGuid(),
             QuestionId = question.Id,
@@ -152,9 +156,7 @@ public class QuestionService : IQuestionService
             DisplayOrder = o.DisplayOrder
         }).ToList();
 
-        // Replace rubrics
-        _context.QuestionRubrics.RemoveRange(question.Rubrics);
-        question.Rubrics = request.Rubrics.Select(r => new QuestionRubric
+        var nextRubrics = request.Rubrics.Select(r => new QuestionRubric
         {
             Id = Guid.NewGuid(),
             QuestionId = question.Id,
@@ -163,6 +165,9 @@ public class QuestionService : IQuestionService
             Description = r.Description,
             DisplayOrder = r.DisplayOrder
         }).ToList();
+
+        await _context.QuestionOptions.AddRangeAsync(nextOptions, cancellationToken);
+        await _context.QuestionRubrics.AddRangeAsync(nextRubrics, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 

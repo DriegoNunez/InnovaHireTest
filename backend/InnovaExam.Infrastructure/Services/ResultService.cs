@@ -20,6 +20,12 @@ public class ResultService : IResultService
         var attempt = await _context.ExamAttempts
             .Include(a => a.Exam)
             .ThenInclude(e => e.Candidate)
+            .Include(a => a.Exam)
+            .ThenInclude(e => e.ExamQuestions)
+            .ThenInclude(eq => eq.Question)
+            .ThenInclude(q => q.Options)
+            .Include(a => a.CandidateAnswers)
+            .Include(a => a.GradingResults)
             .Include(a => a.FinalReport)
             .FirstOrDefaultAsync(a => a.Id == attemptId, cancellationToken);
 
@@ -38,6 +44,9 @@ public class ResultService : IResultService
 
         if (filter.CandidateId.HasValue)
             query = query.Where(a => a.Exam.CandidateId == filter.CandidateId.Value);
+
+        if (filter.CompletedOnly)
+            query = query.Where(a => a.Status == Domain.Enums.ExamAttemptStatus.Submitted || a.Status == Domain.Enums.ExamAttemptStatus.Completed);
 
         if (filter.Status.HasValue)
             query = query.Where(a => a.Status == filter.Status.Value);
@@ -95,6 +104,43 @@ public class ResultService : IResultService
             CategoryScores = a.FinalReport.CategoryScores,
             ReportPdfUrl = a.FinalReport.ReportPdfUrl,
             CreatedAt = a.FinalReport.CreatedAt
-        } : null
+        } : null,
+        Questions = a.Exam.ExamQuestions
+            .OrderBy(eq => eq.DisplayOrder)
+            .Select(eq =>
+            {
+                var answer = a.CandidateAnswers.FirstOrDefault(candidateAnswer => candidateAnswer.ExamQuestionId == eq.Id);
+                var grade = answer == null
+                    ? null
+                    : a.GradingResults.FirstOrDefault(grading => grading.CandidateAnswerId == answer.Id);
+
+                return new ExamResultQuestionDto
+                {
+                    ExamQuestionId = eq.Id,
+                    DisplayOrder = eq.DisplayOrder,
+                    QuestionText = eq.Question.QuestionText,
+                    QuestionImageUrl = eq.Question.QuestionImageUrl,
+                    QuestionType = eq.Question.QuestionType.ToString(),
+                    Points = eq.Points,
+                    AnswerText = answer?.AnswerText,
+                    SelectedOptionIds = answer?.SelectedOptionIds,
+                    TimeSpentSeconds = answer?.TimeSpentSeconds,
+                    AnsweredAt = answer?.AnsweredAt,
+                    PointsAwarded = grade?.PointsAwarded,
+                    MaxPoints = grade?.MaxPoints,
+                    AiFeedback = grade?.AiFeedback,
+                    Options = eq.Question.Options
+                        .OrderBy(option => option.DisplayOrder)
+                        .Select(option => new ExamResultOptionDto
+                        {
+                            Id = option.Id,
+                            OptionText = option.OptionText,
+                            IsCorrect = option.IsCorrect,
+                            DisplayOrder = option.DisplayOrder
+                        })
+                        .ToList()
+                };
+            })
+            .ToList()
     };
 }

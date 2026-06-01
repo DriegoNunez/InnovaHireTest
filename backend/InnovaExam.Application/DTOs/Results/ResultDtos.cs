@@ -17,6 +17,33 @@ public class ExamResultDto
     public DateTime? SubmittedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public FinalReportDto? FinalReport { get; set; }
+    public ICollection<ExamResultQuestionDto> Questions { get; set; } = new List<ExamResultQuestionDto>();
+}
+
+public class ExamResultQuestionDto
+{
+    public Guid ExamQuestionId { get; set; }
+    public int DisplayOrder { get; set; }
+    public string QuestionText { get; set; } = string.Empty;
+    public string? QuestionImageUrl { get; set; }
+    public string QuestionType { get; set; } = string.Empty;
+    public int Points { get; set; }
+    public string? AnswerText { get; set; }
+    public string? SelectedOptionIds { get; set; }
+    public int? TimeSpentSeconds { get; set; }
+    public DateTime? AnsweredAt { get; set; }
+    public int? PointsAwarded { get; set; }
+    public int? MaxPoints { get; set; }
+    public string? AiFeedback { get; set; }
+    public ICollection<ExamResultOptionDto> Options { get; set; } = new List<ExamResultOptionDto>();
+}
+
+public class ExamResultOptionDto
+{
+    public Guid Id { get; set; }
+    public string OptionText { get; set; } = string.Empty;
+    public bool IsCorrect { get; set; }
+    public int DisplayOrder { get; set; }
 }
 
 public class FinalReportDto
@@ -38,5 +65,6 @@ public class ResultFilterRequest
 {
     public Guid? CandidateId { get; set; }
     public ExamAttemptStatus? Status { get; set; }
+    public bool CompletedOnly { get; set; }
     public string? SearchText { get; set; }
 }

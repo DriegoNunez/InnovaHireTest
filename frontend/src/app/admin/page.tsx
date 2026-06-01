@@ -18,25 +18,16 @@ export default function AdminDashboardPage() {
         const response = await api.getAdminDashboard();
         setStats(response.data);
       } catch {
-        // Use mock data for demo
-        setStats({
-          totalQuestions: 248,
-          activeQuestions: 212,
-          totalCandidates: 1456,
-          totalExams: 892,
-          completedExams: 756,
-          averageScore: 73.5,
-          passingRate: 68.2,
-          recentActivity: [],
-        });
+        setStats(null);
       } finally {
         setLoading(false);
       }
     };
+
     fetchStats();
   }, []);
 
-  if (loading || !stats) {
+  if (loading) {
     return (
       <>
         <Header title="Dashboard" />
@@ -50,6 +41,25 @@ export default function AdminDashboardPage() {
     );
   }
 
+  if (!stats) {
+    return (
+      <>
+        <Header title="Dashboard" breadcrumbs={[{ label: 'Admin' }, { label: 'Dashboard' }]} />
+        <div className="page-content">
+          <Card>
+            <h3>Dashboard unavailable</h3>
+            <p className="admin-muted-cell">The real statistics endpoint could not be loaded.</p>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  const questionActivationRate = stats.totalQuestions > 0
+    ? Math.round((stats.activeQuestions / stats.totalQuestions) * 100)
+    : 0;
+  const recentActivity = stats.recentActivity || [];
+
   return (
     <>
       <Header title="Dashboard" breadcrumbs={[{ label: 'Admin' }, { label: 'Dashboard' }]} />
@@ -57,37 +67,37 @@ export default function AdminDashboardPage() {
         <div className="page-header">
           <div className="page-header-left">
             <h1>Welcome to INNOVA Admin</h1>
-            <p>Overview of your examination platform</p>
+            <p>Live overview of your examination platform</p>
           </div>
         </div>
 
         <div className="stats-grid">
           <StatCard
-            icon="❓"
+            icon="?"
             value={stats.totalQuestions}
             label="Total Questions"
-            change={{ value: `${stats.activeQuestions} active`, positive: true }}
+            change={{ value: `${stats.activeQuestions} published`, positive: true }}
             iconColor="orange"
             className="stagger-1"
           />
           <StatCard
-            icon="👤"
+            icon="ID"
             value={stats.totalCandidates.toLocaleString()}
             label="Total Candidates"
-            change={{ value: '+12% this month', positive: true }}
+            change={{ value: 'from database', positive: true }}
             iconColor="blue"
             className="stagger-2"
           />
           <StatCard
-            icon="📝"
+            icon="EX"
             value={stats.completedExams}
             label="Completed Exams"
-            change={{ value: `${stats.totalExams} total`, positive: true }}
+            change={{ value: `${stats.totalExams} generated`, positive: true }}
             iconColor="green"
             className="stagger-3"
           />
           <StatCard
-            icon="📊"
+            icon="%"
             value={`${stats.averageScore}%`}
             label="Average Score"
             change={{ value: `${stats.passingRate}% pass rate`, positive: stats.passingRate > 60 }}
@@ -100,33 +110,31 @@ export default function AdminDashboardPage() {
           <Card className="animate-fadeInUp stagger-5">
             <h3 style={{ marginBottom: 'var(--space-5)' }}>Recent Activity</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              {[
-                { action: 'New exam submitted', user: 'Maria Garcia', time: '2 min ago', type: 'info' },
-                { action: 'Question added to bank', user: 'Admin User', time: '15 min ago', type: 'success' },
-                { action: 'Candidate invited', user: 'HR Manager', time: '1 hour ago', type: 'warning' },
-                { action: 'Results graded by AI', user: 'System', time: '2 hours ago', type: 'success' },
-                { action: 'New HR user created', user: 'Admin User', time: '3 hours ago', type: 'info' },
-              ].map((item, idx) => (
+              {recentActivity.length > 0 ? recentActivity.map((item, idx) => (
                 <div
-                  key={idx}
+                  key={item.id || idx}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    gap: 'var(--space-4)',
                     padding: 'var(--space-3) var(--space-4)',
                     background: 'rgba(255,255,255,0.02)',
                     borderRadius: 'var(--radius-md)',
-                    borderLeft: '3px solid',
-                    borderLeftColor: item.type === 'success' ? 'var(--color-success)' : item.type === 'warning' ? 'var(--color-warning)' : 'var(--color-info)',
+                    borderLeft: '3px solid var(--color-info)',
                   }}
                 >
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{item.action}</div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>by {item.user}</div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>by {item.userName}</div>
                   </div>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{item.time}</span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', textAlign: 'right' }}>
+                    {new Date(item.timestamp).toLocaleString()}
+                  </span>
                 </div>
-              ))}
+              )) : (
+                <div className="admin-empty-inline">No recent activity yet.</div>
+              )}
             </div>
           </Card>
 
@@ -153,20 +161,18 @@ export default function AdminDashboardPage() {
               </div>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
-                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>Active Questions</span>
-                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
-                    {Math.round((stats.activeQuestions / stats.totalQuestions) * 100)}%
-                  </span>
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>Published Questions</span>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>{questionActivationRate}%</span>
                 </div>
                 <div className="result-category-bar">
-                  <div className="result-category-fill" style={{ width: `${(stats.activeQuestions / stats.totalQuestions) * 100}%` }} />
+                  <div className="result-category-fill" style={{ width: `${questionActivationRate}%` }} />
                 </div>
               </div>
               <div style={{ marginTop: 'var(--space-4)', paddingTop: 'var(--space-4)', borderTop: '1px solid var(--color-border)' }}>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-2)' }}>
                   PLATFORM STATUS
                 </div>
-                <Badge variant="success" dot>All systems operational</Badge>
+                <Badge variant="success" dot>Live database statistics</Badge>
               </div>
             </div>
           </Card>

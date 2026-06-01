@@ -23,4 +23,14 @@ public class ResultsController : ControllerBase
         var results = await _resultService.GetPagedAsync(filter, paging);
         return Ok(results);
     }
+
+    [HttpGet("{attemptId}")]
+    public async Task<IActionResult> GetResult(Guid attemptId)
+    {
+        var result = await _resultService.GetByAttemptIdAsync(attemptId);
+        if (result == null)
+            return NotFound();
+
+        return Ok(result);
+    }
 }

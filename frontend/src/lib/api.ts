@@ -11,9 +11,13 @@ import type {
   Candidate,
   CandidateFormData,
   CandidateFilters,
+  GeneratedExam,
   ExamAttempt,
   ExamResult,
   ExamSession,
+  ExamQuestion,
+  ExamAnswerUpload,
+  ExamTokenValidation,
   ExamConfig,
   ResultFilters,
   AuditLog,
@@ -27,7 +31,13 @@ import type {
   ExperienceLevel,
 } from '@/types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5095/api';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5095/api';
+
+export const resolveApiAssetUrl = (path?: string | null): string => {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_BASE.replace(/\/api\/?$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+};
 
 type BackendPaged<T> = {
   items?: T[];
@@ -100,6 +110,100 @@ type BackendAuditLog = {
   createdAt: string;
 };
 
+type BackendCandidate = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  experienceLevel: number | string;
+  yearsOfExperience?: number;
+  currentCompany?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+type BackendExam = {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
+  title: string;
+  experienceLevel: number | string;
+  totalQuestions: number;
+  totalPoints: number;
+  timeLimitMinutes: number;
+  invitationUrl?: string;
+  tokenExpiresAt?: string;
+  createdAt: string;
+  latestAttemptStatus?: string;
+};
+
+type BackendExamSession = {
+  examId: string;
+  attemptId: string;
+  title: string;
+  totalQuestions: number;
+  timeLimitMinutes: number;
+  startedAt: string;
+  expiresAt: string;
+};
+
+type BackendExamQuestion = {
+  examQuestionId: string;
+  displayOrder: number;
+  points: number;
+  questionType: number | string;
+  questionText: string;
+  questionImageUrl?: string;
+  timeLimitSeconds: number;
+  options?: {
+    id: string;
+    optionText: string;
+    displayOrder: number;
+  }[];
+};
+
+type BackendExamResult = {
+  examAttemptId: string;
+  examId: string;
+  candidateName: string;
+  candidateEmail: string;
+  examTitle: string;
+  status: number | string;
+  totalScore?: number;
+  percentageScore?: number;
+  totalPoints: number;
+  startedAt?: string;
+  submittedAt?: string;
+  completedAt?: string;
+  questions?: BackendExamResultQuestion[];
+};
+
+type BackendExamResultQuestion = {
+  examQuestionId: string;
+  displayOrder: number;
+  questionText: string;
+  questionImageUrl?: string;
+  questionType: string;
+  points: number;
+  answerText?: string;
+  selectedOptionIds?: string;
+  timeSpentSeconds?: number;
+  answeredAt?: string;
+  pointsAwarded?: number;
+  maxPoints?: number;
+  aiFeedback?: string;
+  options?: {
+    id: string;
+    optionText: string;
+    isCorrect: boolean;
+    displayOrder: number;
+  }[];
+};
+
 const questionTypeToApi: Record<string, number> = {
   multiple_choice_single: 0,
   multiple_choice: 0,
@@ -128,16 +232,16 @@ const questionTypeFromApi: Record<string, QuestionType> = {
   FillInBlank: 'fill_in_blank',
   '4': 'short_answer',
   ShortAnswer: 'short_answer',
-  '5': 'long_technical',
-  LongTechnical: 'long_technical',
+  '5': 'short_answer',
+  LongTechnical: 'short_answer',
   '6': 'calculation_problem',
   CalculationProblem: 'calculation_problem',
-  '7': 'structural_design',
-  StructuralDesign: 'structural_design',
-  '8': 'drawing_interpretation',
-  DrawingInterpretation: 'drawing_interpretation',
-  '9': 'code_interpretation',
-  CodeInterpretation: 'code_interpretation',
+  '7': 'short_answer',
+  StructuralDesign: 'short_answer',
+  '8': 'short_answer',
+  DrawingInterpretation: 'short_answer',
+  '9': 'short_answer',
+  CodeInterpretation: 'short_answer',
 };
 
 const difficultyToApi: Record<string, number> = {
@@ -194,6 +298,32 @@ const statusFromApi: Record<string, QuestionStatus> = {
   Archived: 'archived',
 };
 
+const attemptStatusToApi: Record<string, number> = {
+  pending: 0,
+  not_started: 0,
+  in_progress: 1,
+  submitted: 2,
+  grading: 3,
+  graded: 4,
+  completed: 4,
+  expired: 5,
+};
+
+const attemptStatusFromApi: Record<string, ExamAttempt['status']> = {
+  '0': 'pending',
+  Pending: 'pending',
+  '1': 'in_progress',
+  InProgress: 'in_progress',
+  '2': 'submitted',
+  Submitted: 'submitted',
+  '3': 'grading',
+  Grading: 'grading',
+  '4': 'completed',
+  Completed: 'completed',
+  '5': 'expired',
+  Expired: 'expired',
+};
+
 const titleCase = (value: string) =>
   value
     .replace(/_/g, ' ')
@@ -212,6 +342,103 @@ const mapUser = (user: BackendUser): User => ({
   createdAt: user.createdAt,
   updatedAt: user.lastLoginAt || user.createdAt,
 });
+
+const mapCandidate = (candidate: BackendCandidate): Candidate => ({
+  id: candidate.id,
+  firstName: candidate.firstName,
+  lastName: candidate.lastName,
+  email: candidate.email,
+  phone: candidate.phone,
+  experienceLevel: experienceFromApi[String(candidate.experienceLevel)] || 'entry_level',
+  yearsOfExperience: candidate.yearsOfExperience,
+  currentCompany: candidate.currentCompany,
+  position: candidate.currentCompany || '',
+  status: candidate.isActive ? 'pending' : 'expired',
+  notes: candidate.notes,
+  createdAt: candidate.createdAt,
+  updatedAt: candidate.updatedAt || candidate.createdAt,
+  createdBy: 'Admin',
+});
+
+const mapCandidateRequest = (data: CandidateFormData) => ({
+  firstName: data.firstName,
+  lastName: data.lastName,
+  email: data.email,
+  phone: data.phone || null,
+  experienceLevel: experienceToApi[data.experienceLevel || 'entry_level'],
+  yearsOfExperience: data.yearsOfExperience || null,
+  currentCompany: data.currentCompany || data.position || null,
+  resumeUrl: null,
+  notes: data.notes || null,
+});
+
+const mapExam = (exam: BackendExam): GeneratedExam => ({
+  id: exam.id,
+  candidateId: exam.candidateId,
+  candidateName: exam.candidateName,
+  candidateEmail: exam.candidateEmail,
+  title: exam.title,
+  experienceLevel: experienceFromApi[String(exam.experienceLevel)] || 'entry_level',
+  totalQuestions: exam.totalQuestions,
+  totalPoints: exam.totalPoints,
+  timeLimitMinutes: exam.timeLimitMinutes,
+  invitationUrl: exam.invitationUrl || '',
+  tokenExpiresAt: exam.tokenExpiresAt,
+  createdAt: exam.createdAt,
+  latestAttemptStatus: exam.latestAttemptStatus,
+});
+
+const mapExamQuestion = (question: BackendExamQuestion): ExamQuestion => ({
+  examQuestionId: question.examQuestionId,
+  displayOrder: question.displayOrder,
+  points: question.points,
+  questionType: questionTypeFromApi[String(question.questionType)] || 'short_answer',
+  questionText: question.questionText,
+  questionImageUrl: question.questionImageUrl,
+  timeLimitSeconds: question.timeLimitSeconds,
+  options: (question.options || []).sort((a, b) => a.displayOrder - b.displayOrder),
+});
+
+const mapExamResult = (result: BackendExamResult): ExamAttempt => ({
+  id: result.examAttemptId,
+  examId: result.examId,
+  candidateId: '',
+  candidateName: result.candidateName,
+  candidateEmail: result.candidateEmail,
+  examTitle: result.examTitle,
+  examConfigId: result.examId,
+  status: attemptStatusFromApi[String(result.status)] || 'submitted',
+  startedAt: result.startedAt,
+  submittedAt: result.submittedAt,
+  completedAt: result.completedAt,
+  totalScore: result.totalScore,
+  maxScore: result.totalPoints,
+  percentageScore: result.percentageScore ? Number(result.percentageScore) : undefined,
+  isPassing: result.percentageScore !== undefined && Number(result.percentageScore) >= 70,
+  answers: [],
+});
+
+const mapExamResultDetail = (result: BackendExamResult): ExamResult => {
+  const attempt = mapExamResult(result);
+  const percentageScore = result.percentageScore ? Number(result.percentageScore) : 0;
+
+  return {
+    attempt,
+    questions: (result.questions || []).map((question) => ({
+      ...question,
+      options: (question.options || []).sort((a, b) => a.displayOrder - b.displayOrder),
+    })),
+    categoryScores: [],
+    totalScore: result.totalScore || 0,
+    maxScore: result.totalPoints,
+    percentageScore,
+    isPassing: percentageScore >= 70,
+    timeTaken: 0,
+    misuseRiskScore: 0,
+    aiGradingSummary: '',
+    hiringRecommendation: 'neutral',
+  };
+};
 
 const mapQuestion = (question: BackendQuestion): Question => {
   const type = questionTypeFromApi[String(question.questionType)] || 'short_answer';
@@ -260,7 +487,7 @@ const mapQuestion = (question: BackendQuestion): Question => {
 };
 
 const mapQuestionRequest = (data: Partial<QuestionFormData>) => ({
-  categoryId: data.categoryId,
+  categoryId: data.categoryId || '44444444-0001-0001-0001-000000000001',
   questionType: questionTypeToApi[data.type || 'short_answer'],
   difficultyLevel: difficultyToApi[data.difficulty || 'level3'],
   experienceLevel: experienceToApi[data.experienceLevel || 'entry_level'],
@@ -268,7 +495,7 @@ const mapQuestionRequest = (data: Partial<QuestionFormData>) => ({
   questionImageUrl: data.imageUrl || null,
   explanation: data.explanation || null,
   points: data.points || 0,
-  timeLimitSeconds: data.timeLimit || 0,
+  timeLimitSeconds: 0,
   status: statusToApi[data.status || (data.isActive ? 'published' : 'draft')],
   options: (data.options || []).map((option, index) => ({
     optionText: option.text,
@@ -312,8 +539,9 @@ class ApiClient {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = this.getToken();
+    const isFormData = options.body instanceof FormData;
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(options.headers as Record<string, string>),
     };
 
@@ -412,6 +640,18 @@ class ApiClient {
     return { data: mapQuestion(response) };
   }
 
+  async uploadQuestionImage(file: File): Promise<ApiResponse<{ imageUrl: string }>> {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const response = await this.request<{ imageUrl: string }>('/admin/questions/images', {
+      method: 'POST',
+      body: formData,
+    });
+
+    return { data: response };
+  }
+
   async deleteQuestion(id: string): Promise<void> {
     return this.request(`/admin/questions/${id}`, { method: 'DELETE' });
   }
@@ -457,53 +697,95 @@ class ApiClient {
 
   async getCandidates(filters?: CandidateFilters): Promise<PaginatedResponse<Candidate>> {
     const params = new URLSearchParams();
+    if (filters?.search) params.append('SearchText', filters.search);
+    if (filters?.experienceLevel) params.append('ExperienceLevel', String(experienceToApi[filters.experienceLevel]));
     if (filters?.page) params.append('Page', String(filters.page));
     if (filters?.limit) params.append('PageSize', String(filters.limit));
     const query = params.toString() ? `?${params.toString()}` : '';
-    return this.request<PaginatedResponse<Candidate>>(`/hr/candidates${query}`);
+    const response = await this.request<BackendPaged<BackendCandidate>>(`/hr/candidates${query}`);
+    return mapPaged(response, mapCandidate);
   }
 
   async getCandidate(id: string): Promise<ApiResponse<Candidate>> {
-    return this.request<ApiResponse<Candidate>>(`/hr/candidates/${id}`);
+    const response = await this.request<BackendCandidate>(`/hr/candidates/${id}`);
+    return { data: mapCandidate(response) };
   }
 
   async createCandidate(data: CandidateFormData): Promise<ApiResponse<Candidate>> {
-    return this.request<ApiResponse<Candidate>>('/hr/candidates', {
+    const response = await this.request<BackendCandidate>('/hr/candidates', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(mapCandidateRequest(data)),
     });
+    return { data: mapCandidate(response) };
   }
 
   async updateCandidate(id: string, data: Partial<CandidateFormData>): Promise<ApiResponse<Candidate>> {
-    return this.request<ApiResponse<Candidate>>(`/hr/candidates/${id}`, {
+    const response = await this.request<BackendCandidate>(`/hr/candidates/${id}`, {
       method: 'PUT',
+      body: JSON.stringify(mapCandidateRequest(data as CandidateFormData)),
+    });
+    return { data: mapCandidate(response) };
+  }
+
+  async generateExam(data: { candidateId: string; experienceLevel: ExperienceLevel; timeLimitMinutes: number; totalQuestions?: number }): Promise<ApiResponse<GeneratedExam>> {
+    const response = await this.request<BackendExam>('/hr/exams/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        candidateId: data.candidateId,
+        experienceLevel: experienceToApi[data.experienceLevel],
+        timeLimitMinutes: data.timeLimitMinutes,
+        totalQuestions: data.totalQuestions || null,
+      }),
+    });
+    return { data: mapExam(response) };
+  }
+
+  async getExam(id: string): Promise<ApiResponse<GeneratedExam>> {
+    const response = await this.request<BackendExam>(`/hr/exams/${id}`);
+    return { data: mapExam(response) };
+  }
+
+  async getExamPreviewQuestions(examId: string): Promise<ExamQuestion[]> {
+    const response = await this.request<BackendExamQuestion[]>(`/hr/exams/${examId}/questions`);
+    return response.map(mapExamQuestion);
+  }
+
+  async sendExamInvite(examId: string): Promise<void> {
+    return this.request(`/hr/exams/${examId}/invite`, { method: 'POST' });
+  }
+
+  async validateExamToken(token: string): Promise<ExamTokenValidation> {
+    return this.request<ExamTokenValidation>(`/exam/validate/${token}`);
+  }
+
+  async startExam(token: string): Promise<ExamSession> {
+    return this.request<BackendExamSession>(`/exam/${token}/start`, { method: 'POST' });
+  }
+
+  async getExamQuestions(attemptId: string): Promise<ExamQuestion[]> {
+    const response = await this.request<BackendExamQuestion[]>(`/exam/attempts/${attemptId}/questions`);
+    return response.map(mapExamQuestion);
+  }
+
+  async uploadExamAnswerFile(attemptId: string, file: File): Promise<ExamAnswerUpload> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return this.request<ExamAnswerUpload>(`/exam/attempts/${attemptId}/answers/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async submitExamAnswer(attemptId: string, data: { examQuestionId: string; answerText?: string; selectedOptionIds?: string[]; timeSpentSeconds?: number; isMarkedForReview?: boolean }): Promise<void> {
+    return this.request(`/exam/attempts/${attemptId}/answers`, {
+      method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async sendInvite(candidateId: string): Promise<ApiResponse<Candidate>> {
-    return this.request<ApiResponse<Candidate>>(`/hr/candidates/${candidateId}/invite`, {
-      method: 'POST',
-    });
-  }
-
-  async validateExamToken(token: string): Promise<ApiResponse<{ candidate: Candidate; config: ExamConfig }>> {
-    return this.request<ApiResponse<{ candidate: Candidate; config: ExamConfig }>>(`/exam/validate/${token}`);
-  }
-
-  async startExam(token: string): Promise<ApiResponse<ExamSession>> {
-    return this.request<ApiResponse<ExamSession>>(`/exam/${token}/start`, { method: 'POST' });
-  }
-
-  async submitAnswer(token: string, questionId: string, answer: string | string[], timeSpent: number): Promise<void> {
-    return this.request(`/exam/${token}/answer`, {
-      method: 'POST',
-      body: JSON.stringify({ questionId, answer, timeSpent }),
-    });
-  }
-
-  async submitExam(token: string): Promise<ApiResponse<{ attemptId: string }>> {
-    return this.request<ApiResponse<{ attemptId: string }>>(`/exam/${token}/submit`, { method: 'POST' });
+  async submitExamAttempt(attemptId: string): Promise<void> {
+    return this.request(`/exam/attempts/${attemptId}/submit`, { method: 'POST' });
   }
 
   async reportBehavior(token: string, events: BehaviorEvent[]): Promise<void> {
@@ -515,14 +797,19 @@ class ApiClient {
 
   async getResults(filters?: ResultFilters): Promise<PaginatedResponse<ExamAttempt>> {
     const params = new URLSearchParams();
+    if (filters?.search) params.append('SearchText', filters.search);
+    if (filters?.status) params.append('Status', String(attemptStatusToApi[filters.status]));
+    if (filters?.completedOnly) params.append('CompletedOnly', 'true');
     if (filters?.page) params.append('Page', String(filters.page));
     if (filters?.limit) params.append('PageSize', String(filters.limit));
     const query = params.toString() ? `?${params.toString()}` : '';
-    return this.request<PaginatedResponse<ExamAttempt>>(`/hr/results${query}`);
+    const response = await this.request<BackendPaged<BackendExamResult>>(`/hr/results${query}`);
+    return mapPaged(response, mapExamResult);
   }
 
   async getResult(attemptId: string): Promise<ApiResponse<ExamResult>> {
-    return this.request<ApiResponse<ExamResult>>(`/hr/results/${attemptId}`);
+    const response = await this.request<BackendExamResult>(`/hr/results/${attemptId}`);
+    return { data: mapExamResultDetail(response) };
   }
 
   async getAuditLogs(filters?: AuditFilters): Promise<PaginatedResponse<AuditLog>> {

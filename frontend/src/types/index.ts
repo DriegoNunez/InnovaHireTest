@@ -121,8 +121,11 @@ export interface Candidate {
   lastName: string;
   email: string;
   phone?: string;
-  position: string;
+  position?: string;
   department?: string;
+  experienceLevel?: ExperienceLevel;
+  yearsOfExperience?: number;
+  currentCompany?: string;
   status: CandidateStatus;
   inviteToken?: string;
   inviteSentAt?: string;
@@ -138,9 +141,28 @@ export interface CandidateFormData {
   lastName: string;
   email: string;
   phone?: string;
-  position: string;
+  experienceLevel: ExperienceLevel;
+  yearsOfExperience?: number;
+  currentCompany?: string;
+  position?: string;
   department?: string;
   notes?: string;
+}
+
+export interface GeneratedExam {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
+  title: string;
+  experienceLevel: ExperienceLevel;
+  totalQuestions: number;
+  totalPoints: number;
+  timeLimitMinutes: number;
+  invitationUrl: string;
+  tokenExpiresAt?: string;
+  createdAt: string;
+  latestAttemptStatus?: string;
 }
 
 // ─── Exam ────────────────────────────────────────────────────
@@ -160,13 +182,18 @@ export interface ExamConfig {
 
 export interface ExamAttempt {
   id: string;
+  examId?: string;
   candidateId: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  examTitle?: string;
   candidate?: Candidate;
   examConfigId: string;
   examConfig?: ExamConfig;
-  status: 'not_started' | 'in_progress' | 'submitted' | 'graded';
+  status: 'not_started' | 'pending' | 'in_progress' | 'submitted' | 'grading' | 'graded' | 'completed' | 'expired';
   startedAt?: string;
   submittedAt?: string;
+  completedAt?: string;
   gradedAt?: string;
   totalScore?: number;
   maxScore?: number;
@@ -193,14 +220,41 @@ export interface ExamAnswer {
 }
 
 export interface ExamSession {
-  token: string;
-  candidate: Candidate;
-  config: ExamConfig;
-  questions: Question[];
+  examId: string;
+  attemptId: string;
+  title: string;
+  totalQuestions: number;
+  timeLimitMinutes: number;
   startedAt: string;
-  endsAt: string;
-  currentQuestionIndex: number;
-  answers: Record<string, string | string[]>;
+  expiresAt: string;
+}
+
+export interface ExamTokenValidation {
+  isValid: boolean;
+  examId?: string;
+  candidateName?: string;
+  examTitle?: string;
+  hasExistingAttempt: boolean;
+}
+
+export interface ExamQuestion {
+  examQuestionId: string;
+  displayOrder: number;
+  points: number;
+  questionType: QuestionType;
+  questionText: string;
+  questionImageUrl?: string;
+  timeLimitSeconds: number;
+  options: {
+    id: string;
+    optionText: string;
+    displayOrder: number;
+  }[];
+}
+
+export interface ExamAnswerUpload {
+  fileUrl: string;
+  fileName: string;
 }
 
 // ─── Results ─────────────────────────────────────────────────
@@ -216,6 +270,7 @@ export interface CategoryScore {
 
 export interface ExamResult {
   attempt: ExamAttempt;
+  questions?: ExamResultQuestion[];
   categoryScores: CategoryScore[];
   totalScore: number;
   maxScore: number;
@@ -225,6 +280,28 @@ export interface ExamResult {
   misuseRiskScore: number;
   aiGradingSummary: string;
   hiringRecommendation: HiringRecommendation;
+}
+
+export interface ExamResultQuestion {
+  examQuestionId: string;
+  displayOrder: number;
+  questionText: string;
+  questionImageUrl?: string;
+  questionType: string;
+  points: number;
+  answerText?: string;
+  selectedOptionIds?: string;
+  timeSpentSeconds?: number;
+  answeredAt?: string;
+  pointsAwarded?: number;
+  maxPoints?: number;
+  aiFeedback?: string;
+  options: {
+    id: string;
+    optionText: string;
+    isCorrect: boolean;
+    displayOrder: number;
+  }[];
 }
 
 // ─── Behavior Monitoring ─────────────────────────────────────
@@ -336,6 +413,7 @@ export interface CandidateFilters {
   search?: string;
   status?: CandidateStatus;
   position?: string;
+  experienceLevel?: ExperienceLevel;
   page?: number;
   limit?: number;
 }
@@ -344,6 +422,7 @@ export interface ResultFilters {
   search?: string;
   status?: ExamAttempt['status'];
   isPassing?: boolean;
+  completedOnly?: boolean;
   page?: number;
   limit?: number;
 }

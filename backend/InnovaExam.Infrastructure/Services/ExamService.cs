@@ -84,6 +84,11 @@ public class ExamService : IExamService
             .Take(totalQuestionsNeeded)
             .ToListAsync(cancellationToken);
 
+        if (questions.Count == 0)
+        {
+            throw new InvalidOperationException("No published questions are available for the selected experience level.");
+        }
+
         var accessToken = GenerateAccessToken();
         var totalPoints = questions.Sum(q => q.Points);
 
@@ -97,6 +102,7 @@ public class ExamService : IExamService
             TotalPoints = totalPoints,
             TimeLimitMinutes = request.TimeLimitMinutes,
             AccessToken = accessToken,
+            InvitationUrl = $"/exam/{accessToken}",
             TokenExpiresAt = DateTime.UtcNow.AddDays(7),
             CreatedBy = createdBy,
             CreatedAt = DateTime.UtcNow,
@@ -137,7 +143,7 @@ public class ExamService : IExamService
             EmailType = EmailType.ExamInvitation,
             RecipientEmail = exam.Candidate.Email,
             Subject = $"INNOVA Technologies - Structural Engineering Exam Invitation",
-            Body = $"You have been invited to take the structural engineering exam. Your access token: {exam.AccessToken}",
+            Body = $"You have been invited to take the structural engineering exam. Open this link: {exam.InvitationUrl ?? $"/exam/{exam.AccessToken}"}",
             Status = EmailStatus.Queued,
             CreatedAt = DateTime.UtcNow
         };
@@ -145,6 +151,14 @@ public class ExamService : IExamService
         await _context.EmailLogs.AddAsync(emailLog, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<IEnumerable<ExamQuestionDto>> GetExamPreviewQuestionsAsync(Guid examId, CancellationToken cancellationToken = default)
+    {
+        var exists = await _context.Exams.AnyAsync(e => e.Id == examId, cancellationToken);
+        if (!exists) return Enumerable.Empty<ExamQuestionDto>();
+
+        return await GetExamQuestionDtosAsync(examId, cancellationToken);
     }
 
     public async Task<ValidateTokenResponse> ValidateTokenAsync(string token, CancellationToken cancellationToken = default)
@@ -228,10 +242,15 @@ public class ExamService : IExamService
 
         if (attempt == null) return Enumerable.Empty<ExamQuestionDto>();
 
+        return await GetExamQuestionDtosAsync(attempt.ExamId, cancellationToken);
+    }
+
+    private async Task<IEnumerable<ExamQuestionDto>> GetExamQuestionDtosAsync(Guid examId, CancellationToken cancellationToken = default)
+    {
         var examQuestions = await _context.ExamQuestions
             .Include(eq => eq.Question)
             .ThenInclude(q => q.Options.OrderBy(o => o.DisplayOrder))
-            .Where(eq => eq.ExamId == attempt.ExamId)
+            .Where(eq => eq.ExamId == examId)
             .OrderBy(eq => eq.DisplayOrder)
             .ToListAsync(cancellationToken);
 
@@ -361,7 +380,7 @@ public class ExamService : IExamService
         TotalQuestions = e.TotalQuestions,
         TotalPoints = e.TotalPoints,
         TimeLimitMinutes = e.TimeLimitMinutes,
-        InvitationUrl = e.InvitationUrl,
+        InvitationUrl = e.InvitationUrl ?? $"/exam/{e.AccessToken}",
         TokenExpiresAt = e.TokenExpiresAt,
         CreatedAt = e.CreatedAt,
         LatestAttemptStatus = e.ExamAttempts.OrderByDescending(a => a.CreatedAt).FirstOrDefault()?.Status.ToString()

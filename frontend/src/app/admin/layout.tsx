@@ -23,6 +23,7 @@ const ADMIN_NAV = [
     title: 'People',
     items: [
       { href: '/admin/users', label: 'User Management', icon: '👥' },
+      { href: '/admin/candidates', label: 'Candidates', icon: 'ID' },
     ],
   },
   {

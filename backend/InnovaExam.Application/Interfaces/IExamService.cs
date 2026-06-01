@@ -9,6 +9,7 @@ public interface IExamService
     Task<PagedResult<ExamDto>> GetPagedAsync(ExamFilterRequest filter, PagedRequest paging, CancellationToken cancellationToken = default);
     Task<ExamDto> GenerateExamAsync(GenerateExamRequest request, Guid createdBy, CancellationToken cancellationToken = default);
     Task<bool> SendInviteAsync(Guid examId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<ExamQuestionDto>> GetExamPreviewQuestionsAsync(Guid examId, CancellationToken cancellationToken = default);
 
     // Candidate-facing exam endpoints
     Task<ValidateTokenResponse> ValidateTokenAsync(string token, CancellationToken cancellationToken = default);

@@ -12,9 +12,10 @@ import { api } from '@/lib/api';
 import {
   DIFFICULTIES,
   EXPERIENCE_LEVELS,
+  FALLBACK_CATEGORIES,
   QUESTION_TYPES,
 } from '@/components/admin/QuestionForm';
-import type { Question, QuestionFilters } from '@/types';
+import type { Question, QuestionFilters, QuestionFormData, QuestionType } from '@/types';
 
 const demoQuestions: Question[] = [
   {
@@ -70,10 +71,48 @@ const demoQuestions: Question[] = [
 const labelFor = (options: { value: string; label: string }[], value?: string) =>
   options.find((option) => option.value === value)?.label || value || '';
 
+const normalizeQuestionType = (type: Question['type']): QuestionType => {
+  if (type === 'multiple_choice' || type === 'multiple_choice_single') return 'multiple_choice_single';
+  if (type === 'multi_select' || type === 'multiple_choice_multiple') return 'multiple_choice_multiple';
+  if (type === 'true_false') return 'true_false';
+  if (type === 'calculation_problem') return 'calculation_problem';
+  return 'short_answer';
+};
+
 const difficultyVariant = (difficulty: Question['difficulty']) => {
   if (difficulty === 'level1' || difficulty === 'level2' || difficulty === 'easy') return 'success' as const;
   if (difficulty === 'level3' || difficulty === 'medium') return 'warning' as const;
   return 'danger' as const;
+};
+
+const questionToFormData = (question: Question, status = question.status): QuestionFormData => {
+  return {
+    categoryId: question.categoryId || FALLBACK_CATEGORIES[0]?.id,
+    text: question.text,
+    type: normalizeQuestionType(question.type),
+    category: question.categoryName || question.category,
+    difficulty: question.difficulty,
+    experienceLevel: question.experienceLevel || 'entry_level',
+    status,
+    points: question.points,
+    timeLimit: 0,
+    imageUrl: question.imageUrl,
+    options: (question.options || []).map((option) => ({
+      text: option.text,
+      isCorrect: option.isCorrect,
+      order: option.order,
+    })),
+    rubric: (question.rubric || []).map((criterion) => ({
+      name: criterion.name,
+      description: criterion.description,
+      maxScore: criterion.maxScore,
+      weight: criterion.weight,
+      order: criterion.order,
+    })),
+    explanation: question.explanation,
+    tags: question.tags || [],
+    isActive: status === 'published',
+  };
 };
 
 export default function QuestionsPage() {
@@ -82,6 +121,7 @@ export default function QuestionsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState<QuestionFilters>({ page: 1, limit: 10 });
+  const [busyQuestionId, setBusyQuestionId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -102,6 +142,44 @@ export default function QuestionsPage() {
 
     fetchQuestions();
   }, [filters]);
+
+  const handleDeleteQuestion = async (question: Question) => {
+    if (!window.confirm('Delete this question from the question bank?')) return;
+
+    setBusyQuestionId(question.id);
+    try {
+      if (!question.id.startsWith('demo-')) {
+        await api.deleteQuestion(question.id);
+      }
+
+      setQuestions((current) => current.filter((item) => item.id !== question.id));
+      setTotal((current) => Math.max(0, current - 1));
+    } finally {
+      setBusyQuestionId(null);
+    }
+  };
+
+  const handleToggleQuestionStatus = async (question: Question) => {
+    const nextStatus = question.status === 'published' || question.isActive ? 'draft' : 'published';
+
+    setBusyQuestionId(question.id);
+    try {
+      let nextQuestion: Question = {
+        ...question,
+        status: nextStatus,
+        isActive: nextStatus === 'published',
+      };
+
+      if (!question.id.startsWith('demo-')) {
+        const response = await api.updateQuestion(question.id, questionToFormData(question, nextStatus));
+        nextQuestion = response.data;
+      }
+
+      setQuestions((current) => current.map((item) => (item.id === question.id ? nextQuestion : item)));
+    } finally {
+      setBusyQuestionId(null);
+    }
+  };
 
   const stats = useMemo(() => {
     const published = questions.filter((question) => question.status === 'published' || question.isActive).length;
@@ -133,16 +211,10 @@ export default function QuestionsPage() {
       ),
     },
     {
-      key: 'category',
-      header: 'Category',
-      sortable: true,
-      render: (question: Question) => <span className="admin-muted-cell">{question.categoryName || question.category}</span>,
-    },
-    {
       key: 'type',
       header: 'Type',
       sortable: true,
-      render: (question: Question) => <Badge variant="blue">{labelFor(QUESTION_TYPES, question.type)}</Badge>,
+    render: (question: Question) => <Badge variant="blue">{labelFor(QUESTION_TYPES, normalizeQuestionType(question.type))}</Badge>,
     },
     {
       key: 'experienceLevel',
@@ -176,12 +248,33 @@ export default function QuestionsPage() {
     {
       key: 'actions',
       header: '',
-      width: '120px',
+      width: '260px',
       render: (question: Question) => (
         <div className="table-actions">
           <Link href={`/admin/questions/${question.id}`}>
             <Button variant="ghost" size="sm">Edit</Button>
           </Link>
+          <Link href={`/admin/questions/${question.id}/preview`}>
+            <Button variant="secondary" size="sm">Preview</Button>
+          </Link>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busyQuestionId === question.id}
+            onClick={() => handleToggleQuestionStatus(question)}
+          >
+            {question.status === 'published' || question.isActive ? 'Make Draft' : 'Publish'}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            disabled={busyQuestionId === question.id}
+            onClick={() => handleDeleteQuestion(question)}
+          >
+            Delete
+          </Button>
         </div>
       ),
     },

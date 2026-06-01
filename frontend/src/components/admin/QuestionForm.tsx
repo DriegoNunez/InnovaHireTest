@@ -5,18 +5,15 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { api, resolveApiAssetUrl } from '@/lib/api';
 import type { QuestionCategoryOption, QuestionFormData, QuestionType } from '@/types';
 
 export const QUESTION_TYPES = [
   { value: 'multiple_choice_single', label: 'Multiple Choice' },
-  { value: 'multiple_choice_multiple', label: 'Multi Select' },
+  { value: 'multiple_choice_multiple', label: 'Multiple Selection' },
   { value: 'true_false', label: 'True / False' },
-  { value: 'short_answer', label: 'Short Answer' },
-  { value: 'long_technical', label: 'Long Technical' },
+  { value: 'short_answer', label: 'Write Answer' },
   { value: 'calculation_problem', label: 'Calculation Problem' },
-  { value: 'structural_design', label: 'Structural Design' },
-  { value: 'drawing_interpretation', label: 'Drawing Interpretation' },
-  { value: 'code_interpretation', label: 'Code Interpretation' },
 ];
 
 export const DIFFICULTIES = [
@@ -63,13 +60,14 @@ export function createBlankQuestionForm(categories = FALLBACK_CATEGORIES): Quest
     experienceLevel: 'entry_level',
     status: 'draft',
     points: 10,
-    timeLimit: 300,
+    timeLimit: 0,
     imageUrl: '',
     options: [
       { text: '', isCorrect: false, order: 1 },
       { text: '', isCorrect: false, order: 2 },
       { text: '', isCorrect: false, order: 3 },
       { text: '', isCorrect: false, order: 4 },
+      { text: '', isCorrect: false, order: 5 },
     ],
     rubric: [],
     explanation: '',
@@ -88,7 +86,7 @@ interface QuestionFormProps {
 }
 
 const optionQuestionTypes = ['multiple_choice_single', 'multiple_choice_multiple', 'true_false'];
-const rubricQuestionTypes = ['short_answer', 'long_technical', 'calculation_problem', 'structural_design', 'drawing_interpretation', 'code_interpretation'];
+const rubricQuestionTypes = ['short_answer', 'calculation_problem'];
 
 const labelFor = (options: { value: string; label: string }[], value?: string) =>
   options.find((option) => option.value === value)?.label || value || '';
@@ -103,6 +101,8 @@ export function QuestionForm({
 }: QuestionFormProps) {
   const [form, setForm] = useState<QuestionFormData>(initialValue);
   const [tagInput, setTagInput] = useState('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState('');
 
   const activeCategories = categories.length > 0 ? categories : FALLBACK_CATEGORIES;
   const needsOptions = optionQuestionTypes.includes(form.type);
@@ -114,15 +114,6 @@ export function QuestionForm({
 
   const updateForm = (field: keyof QuestionFormData, value: QuestionFormData[keyof QuestionFormData]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleCategoryChange = (categoryId: string) => {
-    const category = activeCategories.find((item) => item.id === categoryId);
-    setForm((prev) => ({
-      ...prev,
-      categoryId,
-      category: category?.name || prev.category,
-    }));
   };
 
   const handleTypeChange = (type: QuestionType) => {
@@ -139,6 +130,7 @@ export function QuestionForm({
           { text: '', isCorrect: false, order: 2 },
           { text: '', isCorrect: false, order: 3 },
           { text: '', isCorrect: false, order: 4 },
+          { text: '', isCorrect: false, order: 5 },
         ];
       }
       return next;
@@ -210,10 +202,39 @@ export function QuestionForm({
     updateForm('tags', form.tags.filter((item) => item !== tag));
   };
 
+  const handleImageUpload = async (file?: File) => {
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setImageUploadError('Choose an image file.');
+      return;
+    }
+
+    setImageUploadError('');
+    setIsUploadingImage(true);
+
+    try {
+      const response = await api.uploadQuestionImage(file);
+      updateForm('imageUrl', response.data.imageUrl);
+    } catch (error) {
+      setImageUploadError(error instanceof Error ? error.message : 'Image upload failed.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const removeImage = () => {
+    updateForm('imageUrl', '');
+    setImageUploadError('');
+  };
+
   const submitForm = async (event: FormEvent) => {
     event.preventDefault();
     await onSubmit({
       ...form,
+      categoryId: form.categoryId || activeCategories[0]?.id,
+      category: activeCategories[0]?.name || form.category,
+      timeLimit: 0,
       isActive: form.status === 'published',
       options: needsOptions ? form.options : [],
       rubric: needsRubric ? form.rubric : [],
@@ -235,13 +256,6 @@ export function QuestionForm({
 
             <div className="question-form-row">
               <Select
-                label="Category"
-                required
-                options={activeCategories.map((category) => ({ value: category.id, label: category.name }))}
-                value={form.categoryId || ''}
-                onChange={(event) => handleCategoryChange(event.target.value)}
-              />
-              <Select
                 label="Question Type"
                 required
                 options={QUESTION_TYPES}
@@ -255,9 +269,6 @@ export function QuestionForm({
                 value={form.difficulty}
                 onChange={(event) => updateForm('difficulty', event.target.value)}
               />
-            </div>
-
-            <div className="question-form-row">
               <Select
                 label="Experience Level"
                 required
@@ -265,6 +276,9 @@ export function QuestionForm({
                 value={form.experienceLevel || 'entry_level'}
                 onChange={(event) => updateForm('experienceLevel', event.target.value)}
               />
+            </div>
+
+            <div className="question-form-row">
               <Input
                 label="Points"
                 type="number"
@@ -273,17 +287,6 @@ export function QuestionForm({
                 value={form.points}
                 onChange={(event) => updateForm('points', Number(event.target.value))}
               />
-              <Input
-                label="Time Limit"
-                type="number"
-                min={0}
-                value={form.timeLimit || ''}
-                onChange={(event) => updateForm('timeLimit', event.target.value ? Number(event.target.value) : undefined)}
-                hint="Seconds. Use 0 or blank for no per-question limit."
-              />
-            </div>
-
-            <div className="question-form-row">
               <Select
                 label="Status"
                 required
@@ -291,12 +294,31 @@ export function QuestionForm({
                 value={form.status || 'draft'}
                 onChange={(event) => updateForm('status', event.target.value)}
               />
-              <Input
-                label="Reference Image URL"
-                value={form.imageUrl || ''}
-                onChange={(event) => updateForm('imageUrl', event.target.value)}
-                placeholder="Optional"
-              />
+            </div>
+
+            <div className="question-form-row">
+              <div className="form-group question-image-upload">
+                <label className="form-label">Reference Image</label>
+                <input
+                  className="form-input"
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  disabled={isUploadingImage}
+                  onChange={(event) => handleImageUpload(event.target.files?.[0])}
+                />
+                <div className="form-hint">
+                  {isUploadingImage ? 'Uploading image...' : 'JPG, PNG, GIF, or WebP. Maximum 5 MB.'}
+                </div>
+                {imageUploadError && <div className="form-error">{imageUploadError}</div>}
+                {form.imageUrl && (
+                  <div className="question-image-preview">
+                    <img src={resolveApiAssetUrl(form.imageUrl)} alt="Uploaded question reference" />
+                    <Button type="button" variant="ghost" size="sm" onClick={removeImage}>
+                      Remove Image
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </Card>
@@ -448,7 +470,6 @@ export function QuestionForm({
           </div>
           <h3>{form.text || 'Question prompt preview'}</h3>
           <div className="admin-preview-meta">
-            <span>{form.category}</span>
             <span>{labelFor(QUESTION_TYPES, form.type)}</span>
             <span>{labelFor(DIFFICULTIES, form.difficulty)}</span>
             <span>{labelFor(EXPERIENCE_LEVELS, form.experienceLevel)}</span>
@@ -456,8 +477,10 @@ export function QuestionForm({
           <div className="admin-preview-score">
             <strong>{form.points}</strong>
             <span>points</span>
-            {form.timeLimit ? <span>{Math.round(form.timeLimit / 60)} min</span> : <span>No limit</span>}
           </div>
+          {form.imageUrl && (
+            <img className="admin-preview-image" src={resolveApiAssetUrl(form.imageUrl)} alt="Question reference preview" />
+          )}
           {needsOptions && (
             <div className="admin-preview-list">
               {(form.options || []).map((option, index) => (
