@@ -74,15 +74,18 @@ public class ExamService : IExamService
         var candidate = await _context.Candidates.FindAsync(new object[] { request.CandidateId }, cancellationToken)
             ?? throw new InvalidOperationException("Candidate not found");
 
-        // Select random published questions for the experience level
+        // Select a fresh random sample from the published question bank for the requested level.
         var totalQuestionsNeeded = request.TotalQuestions ?? 30;
 
-        var questions = await _context.Questions
+        var eligibleQuestions = await _context.Questions
+            .AsNoTracking()
             .Where(q => q.Status == QuestionStatus.Published
                 && q.ExperienceLevel == request.ExperienceLevel)
-            .OrderBy(q => Guid.NewGuid()) // random
-            .Take(totalQuestionsNeeded)
             .ToListAsync(cancellationToken);
+
+        var questions = ShuffleQuestions(eligibleQuestions)
+            .Take(totalQuestionsNeeded)
+            .ToList();
 
         if (questions.Count == 0)
         {
@@ -367,6 +370,19 @@ public class ExamService : IExamService
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(bytes);
         return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+    }
+
+    private static List<Question> ShuffleQuestions(IReadOnlyCollection<Question> questions)
+    {
+        var shuffled = questions.ToList();
+
+        for (var index = shuffled.Count - 1; index > 0; index--)
+        {
+            var swapIndex = RandomNumberGenerator.GetInt32(index + 1);
+            (shuffled[index], shuffled[swapIndex]) = (shuffled[swapIndex], shuffled[index]);
+        }
+
+        return shuffled;
     }
 
     private static ExamDto MapToDto(Exam e) => new()

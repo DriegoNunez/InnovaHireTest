@@ -107,10 +107,10 @@ export default function AdminResultsPage() {
       header: '',
       render: (result: ExamAttempt) => (
         <Link href={`/admin/results/${result.id}`}>
-          <button type="button" className="btn btn-secondary btn-sm">View Exam</button>
+          <button type="button" className="btn btn-secondary btn-sm">View Solved Exam</button>
         </Link>
       ),
-      width: '130px',
+      width: '170px',
     },
   ];
 

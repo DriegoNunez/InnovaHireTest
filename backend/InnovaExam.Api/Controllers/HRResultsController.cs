@@ -33,4 +33,24 @@ public class ResultsController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpPost("{attemptId}/grade-ai")]
+    public async Task<IActionResult> GenerateAiGrades(Guid attemptId)
+    {
+        var result = await _resultService.GenerateAiGradesAsync(attemptId);
+        if (result == null)
+            return NotFound();
+
+        return Ok(result);
+    }
+
+    [HttpPut("{attemptId}/grades")]
+    public async Task<IActionResult> UpdateQuestionGrade(Guid attemptId, [FromBody] UpdateQuestionGradeRequest request)
+    {
+        var result = await _resultService.UpdateQuestionGradeAsync(attemptId, request, Guid.Empty);
+        if (result == null)
+            return NotFound();
+
+        return Ok(result);
+    }
 }

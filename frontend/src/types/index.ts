@@ -296,6 +296,9 @@ export interface ExamResultQuestion {
   pointsAwarded?: number;
   maxPoints?: number;
   aiFeedback?: string;
+  isAutoGraded?: boolean;
+  isOverridden?: boolean;
+  overrideReason?: string;
   options: {
     id: string;
     optionText: string;
@@ -414,6 +417,7 @@ export interface CandidateFilters {
   status?: CandidateStatus;
   position?: string;
   experienceLevel?: ExperienceLevel;
+  isActive?: boolean;
   page?: number;
   limit?: number;
 }

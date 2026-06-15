@@ -131,6 +131,23 @@ export default function CandidatesPage() {
     }
   };
 
+  const handleRemoveCandidate = async (candidate: Candidate) => {
+    const name = `${candidate.firstName} ${candidate.lastName}`.trim() || 'this candidate';
+    if (!window.confirm(`Remove ${name} from the candidate list?`)) return;
+
+    setBusyId(candidate.id);
+    try {
+      await api.deleteCandidate(candidate.id);
+      setCandidates((current) => current.filter((item) => item.id !== candidate.id));
+      setTotal((current) => Math.max(0, current - 1));
+      addToast({ type: 'success', title: 'Candidate removed' });
+    } catch {
+      addToast({ type: 'error', title: 'Failed to remove candidate' });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const copyInviteLink = async () => {
     if (!generatedExam) return;
     await navigator.clipboard.writeText(buildInviteLink(generatedExam));
@@ -168,7 +185,7 @@ export default function CandidatesPage() {
     {
       key: 'actions',
       header: '',
-      width: '180px',
+      width: '240px',
       render: (candidate: Candidate) => (
         <div className="table-actions">
           <Button
@@ -179,6 +196,15 @@ export default function CandidatesPage() {
             onClick={() => openInviteModal(candidate)}
           >
             Send Test
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            disabled={busyId === candidate.id}
+            onClick={() => handleRemoveCandidate(candidate)}
+          >
+            Remove
           </Button>
         </div>
       ),

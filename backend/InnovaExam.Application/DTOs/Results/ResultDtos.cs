@@ -35,6 +35,9 @@ public class ExamResultQuestionDto
     public int? PointsAwarded { get; set; }
     public int? MaxPoints { get; set; }
     public string? AiFeedback { get; set; }
+    public bool IsAutoGraded { get; set; }
+    public bool IsOverridden { get; set; }
+    public string? OverrideReason { get; set; }
     public ICollection<ExamResultOptionDto> Options { get; set; } = new List<ExamResultOptionDto>();
 }
 
@@ -67,4 +70,12 @@ public class ResultFilterRequest
     public ExamAttemptStatus? Status { get; set; }
     public bool CompletedOnly { get; set; }
     public string? SearchText { get; set; }
+}
+
+public class UpdateQuestionGradeRequest
+{
+    public Guid ExamQuestionId { get; set; }
+    public int PointsAwarded { get; set; }
+    public string? Feedback { get; set; }
+    public string? OverrideReason { get; set; }
 }

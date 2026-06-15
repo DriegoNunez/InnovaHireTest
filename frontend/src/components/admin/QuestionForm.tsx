@@ -453,8 +453,8 @@ export function QuestionForm({
             </div>
 
             <Textarea
-              label="Explanation"
-              placeholder="Optional explanation for reviewers and future reports..."
+              label="Official Answer / Solution"
+              placeholder="Enter the answer, solution steps, or scoring reference for this question..."
               value={form.explanation || ''}
               onChange={(event) => updateForm('explanation', event.target.value)}
             />
@@ -498,6 +498,12 @@ export function QuestionForm({
                   <span>{criterion.maxScore} pts</span>
                 </div>
               ))}
+            </div>
+          )}
+          {form.explanation && (
+            <div className="admin-preview-answer">
+              <span>Official Answer</span>
+              <p>{form.explanation}</p>
             </div>
           )}
           <div className="admin-form-actions">

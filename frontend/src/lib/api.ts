@@ -196,6 +196,9 @@ type BackendExamResultQuestion = {
   pointsAwarded?: number;
   maxPoints?: number;
   aiFeedback?: string;
+  isAutoGraded?: boolean;
+  isOverridden?: boolean;
+  overrideReason?: string;
   options?: {
     id: string;
     optionText: string;
@@ -699,6 +702,7 @@ class ApiClient {
     const params = new URLSearchParams();
     if (filters?.search) params.append('SearchText', filters.search);
     if (filters?.experienceLevel) params.append('ExperienceLevel', String(experienceToApi[filters.experienceLevel]));
+    params.append('IsActive', String(filters?.isActive ?? true));
     if (filters?.page) params.append('Page', String(filters.page));
     if (filters?.limit) params.append('PageSize', String(filters.limit));
     const query = params.toString() ? `?${params.toString()}` : '';
@@ -725,6 +729,10 @@ class ApiClient {
       body: JSON.stringify(mapCandidateRequest(data as CandidateFormData)),
     });
     return { data: mapCandidate(response) };
+  }
+
+  async deleteCandidate(id: string): Promise<void> {
+    return this.request(`/hr/candidates/${id}`, { method: 'DELETE' });
   }
 
   async generateExam(data: { candidateId: string; experienceLevel: ExperienceLevel; timeLimitMinutes: number; totalQuestions?: number }): Promise<ApiResponse<GeneratedExam>> {
@@ -809,6 +817,24 @@ class ApiClient {
 
   async getResult(attemptId: string): Promise<ApiResponse<ExamResult>> {
     const response = await this.request<BackendExamResult>(`/hr/results/${attemptId}`);
+    return { data: mapExamResultDetail(response) };
+  }
+
+  async generateAiGrades(attemptId: string): Promise<ApiResponse<ExamResult>> {
+    const response = await this.request<BackendExamResult>(`/hr/results/${attemptId}/grade-ai`, {
+      method: 'POST',
+    });
+    return { data: mapExamResultDetail(response) };
+  }
+
+  async updateQuestionGrade(
+    attemptId: string,
+    data: { examQuestionId: string; pointsAwarded: number; feedback?: string; overrideReason?: string }
+  ): Promise<ApiResponse<ExamResult>> {
+    const response = await this.request<BackendExamResult>(`/hr/results/${attemptId}/grades`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
     return { data: mapExamResultDetail(response) };
   }
 

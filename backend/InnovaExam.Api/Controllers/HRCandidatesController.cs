@@ -30,4 +30,11 @@ public class CandidatesController : ControllerBase
         var candidate = await _candidateService.CreateAsync(dto, Guid.Empty);
         return Ok(candidate);
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteCandidate(Guid id)
+    {
+        var deleted = await _candidateService.DeleteAsync(id);
+        return deleted ? NoContent() : NotFound();
+    }
 }

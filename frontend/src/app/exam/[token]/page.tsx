@@ -7,7 +7,6 @@ import { api, resolveApiAssetUrl } from '@/lib/api';
 import type { ExamAnswerUpload, ExamQuestion, ExamSession } from '@/types';
 
 const optionQuestionTypes = ['multiple_choice_single', 'multiple_choice_multiple', 'true_false'];
-const uploadOnlyQuestionTypes = ['calculation_problem'];
 type DraftAnswer = { text?: string; optionIds?: string[]; upload?: ExamAnswerUpload };
 
 export default function CandidateExamPage({ params }: { params: Promise<{ token: string }> }) {
@@ -63,6 +62,9 @@ export default function CandidateExamPage({ params }: { params: Promise<{ token:
     return parts.join('\n\n');
   };
 
+  const isAnswered = (answer?: DraftAnswer) => Boolean(answer?.text?.trim() || (answer?.optionIds && answer.optionIds.length > 0) || answer?.upload);
+  const hasOptions = (question: ExamQuestion) => optionQuestionTypes.includes(question.questionType) && question.options.length > 0;
+
   const startExam = async () => {
     setStarting(true);
     try {
@@ -76,6 +78,13 @@ export default function CandidateExamPage({ params }: { params: Promise<{ token:
     } finally {
       setStarting(false);
     }
+  };
+
+  const updateTextAnswer = (question: ExamQuestion, text: string) => {
+    setAnswers((value) => ({
+      ...value,
+      [question.examQuestionId]: { ...value[question.examQuestionId], text },
+    }));
   };
 
   const updateOptionAnswer = async (question: ExamQuestion, optionId: string) => {
@@ -98,13 +107,6 @@ export default function CandidateExamPage({ params }: { params: Promise<{ token:
         timeSpentSeconds: 0,
       }).catch(() => undefined);
     }
-  };
-
-  const updateTextAnswer = (question: ExamQuestion, text: string) => {
-    setAnswers((value) => ({
-      ...value,
-      [question.examQuestionId]: { ...value[question.examQuestionId], text },
-    }));
   };
 
   const saveTextAnswer = async (question: ExamQuestion) => {
@@ -161,13 +163,13 @@ export default function CandidateExamPage({ params }: { params: Promise<{ token:
   const submitExam = async () => {
     if (!session) return;
 
-    const missingUpload = questions.find((question) =>
-      uploadOnlyQuestionTypes.includes(question.questionType) && !answers[question.examQuestionId]?.upload
-    );
+    const missingAnswer = questions.find((question) => !isAnswered(answers[question.examQuestionId]));
 
-    if (missingUpload) {
-      setSubmitError(`Please upload a PDF or image solution for question ${missingUpload.displayOrder}.`);
-      setCurrentIndex(Math.max(0, questions.indexOf(missingUpload)));
+    if (missingAnswer) {
+      setSubmitError(hasOptions(missingAnswer)
+        ? `Please select an option for question ${missingAnswer.displayOrder}.`
+        : `Please write an answer or upload a PDF/image for question ${missingAnswer.displayOrder}.`);
+      setCurrentIndex(Math.max(0, questions.indexOf(missingAnswer)));
       return;
     }
 
@@ -176,7 +178,13 @@ export default function CandidateExamPage({ params }: { params: Promise<{ token:
     try {
       for (const question of questions) {
         const answer = answers[question.examQuestionId];
-        if (answer?.text !== undefined || answer?.upload) {
+        if (answer?.optionIds && answer.optionIds.length > 0) {
+          await api.submitExamAnswer(session.attemptId, {
+            examQuestionId: question.examQuestionId,
+            selectedOptionIds: answer.optionIds,
+            timeSpentSeconds: 0,
+          });
+        } else if (answer?.text !== undefined || answer?.upload) {
           await api.submitExamAnswer(session.attemptId, {
             examQuestionId: question.examQuestionId,
             answerText: composeAnswerText(answer),
@@ -258,8 +266,7 @@ export default function CandidateExamPage({ params }: { params: Promise<{ token:
   }
 
   const answer = answers[currentQuestion.examQuestionId] || {};
-  const hasOptions = optionQuestionTypes.includes(currentQuestion.questionType);
-  const isUploadOnly = uploadOnlyQuestionTypes.includes(currentQuestion.questionType);
+  const currentQuestionHasOptions = hasOptions(currentQuestion);
 
   return (
     <div className="exam-layout">
@@ -296,7 +303,7 @@ export default function CandidateExamPage({ params }: { params: Promise<{ token:
             />
           )}
 
-          {hasOptions ? (
+          {currentQuestionHasOptions ? (
             <div className="exam-options">
               {currentQuestion.options.map((option) => {
                 const selected = (answer.optionIds || []).includes(option.id);
@@ -315,56 +322,52 @@ export default function CandidateExamPage({ params }: { params: Promise<{ token:
             </div>
           ) : (
             <div className="exam-solution-area">
-              {!isUploadOnly && (
-                <div className="form-group">
-                  <label className="form-label">Your Answer</label>
-                  <textarea
-                    className="form-input form-textarea"
-                    value={answer.text || ''}
-                    onChange={(event) => updateTextAnswer(currentQuestion, event.target.value)}
-                    onBlur={() => saveTextAnswer(currentQuestion)}
-                  />
-                </div>
-              )}
+              <div className="form-group">
+                <label className="form-label">Written Answer</label>
+                <textarea
+                  className="form-input form-textarea"
+                  value={answer.text || ''}
+                  onChange={(event) => updateTextAnswer(currentQuestion, event.target.value)}
+                  onBlur={() => saveTextAnswer(currentQuestion)}
+                />
+              </div>
 
-              {isUploadOnly && (
-                <div className="solution-upload-panel">
-                  <label className="form-label">Upload Your Solution</label>
-                  <input
-                    className="form-input"
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif,image/webp,application/pdf"
-                    disabled={uploadingQuestionId === currentQuestion.examQuestionId}
-                    onChange={(event) => uploadSolution(currentQuestion, event.target.files?.[0])}
-                  />
-                  <div className="form-hint">
-                    {uploadingQuestionId === currentQuestion.examQuestionId
-                      ? 'Uploading solution...'
-                      : 'Attach an image or PDF. Maximum 10 MB.'}
-                  </div>
-                  {uploadErrors[currentQuestion.examQuestionId] && (
-                    <div className="form-error">{uploadErrors[currentQuestion.examQuestionId]}</div>
-                  )}
-                  {answer.upload && (
-                    <div className="solution-upload-preview">
-                      {/\.(jpg|jpeg|png|gif|webp)$/i.test(answer.upload.fileName) || /\.(jpg|jpeg|png|gif|webp)$/i.test(answer.upload.fileUrl) ? (
-                        <img src={resolveApiAssetUrl(answer.upload.fileUrl)} alt="Uploaded solution" />
-                      ) : (
-                        <div className="solution-upload-file">PDF</div>
-                      )}
-                      <div>
-                        <strong>{answer.upload.fileName}</strong>
-                        <a href={resolveApiAssetUrl(answer.upload.fileUrl)} target="_blank" rel="noreferrer">
-                          View upload
-                        </a>
-                      </div>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => removeSolution(currentQuestion)}>
-                        Remove
-                      </Button>
-                    </div>
-                  )}
+              <div className="solution-upload-panel">
+                <label className="form-label">Upload PDF/Image Solution</label>
+                <input
+                  className="form-input"
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp,application/pdf"
+                  disabled={uploadingQuestionId === currentQuestion.examQuestionId}
+                  onChange={(event) => uploadSolution(currentQuestion, event.target.files?.[0])}
+                />
+                <div className="form-hint">
+                  {uploadingQuestionId === currentQuestion.examQuestionId
+                    ? 'Uploading solution...'
+                    : 'Attach a marked-up image, drawing, calculation sheet, or PDF. Maximum 10 MB.'}
                 </div>
-              )}
+                {uploadErrors[currentQuestion.examQuestionId] && (
+                  <div className="form-error">{uploadErrors[currentQuestion.examQuestionId]}</div>
+                )}
+                {answer.upload && (
+                  <div className="solution-upload-preview">
+                    {/\.(jpg|jpeg|png|gif|webp)$/i.test(answer.upload.fileName) || /\.(jpg|jpeg|png|gif|webp)$/i.test(answer.upload.fileUrl) ? (
+                      <img src={resolveApiAssetUrl(answer.upload.fileUrl)} alt="Uploaded solution" />
+                    ) : (
+                      <div className="solution-upload-file">PDF</div>
+                    )}
+                    <div>
+                      <strong>{answer.upload.fileName}</strong>
+                      <a href={resolveApiAssetUrl(answer.upload.fileUrl)} target="_blank" rel="noreferrer">
+                        View upload
+                      </a>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => removeSolution(currentQuestion)}>
+                      Remove
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -399,7 +402,7 @@ export default function CandidateExamPage({ params }: { params: Promise<{ token:
             <button
               key={question.examQuestionId}
               type="button"
-              className={`exam-question-nav-btn ${index === currentIndex ? 'exam-question-nav-btn-current' : ''} ${answers[question.examQuestionId] ? 'exam-question-nav-btn-answered' : ''}`}
+              className={`exam-question-nav-btn ${index === currentIndex ? 'exam-question-nav-btn-current' : ''} ${isAnswered(answers[question.examQuestionId]) ? 'exam-question-nav-btn-answered' : ''}`}
               onClick={() => setCurrentIndex(index)}
             >
               {index + 1}

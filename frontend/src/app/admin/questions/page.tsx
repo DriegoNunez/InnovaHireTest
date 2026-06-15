@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Table } from '@/components/ui/Table';
-import { api } from '@/lib/api';
+import { api, resolveApiAssetUrl } from '@/lib/api';
 import {
   DIFFICULTIES,
   EXPERIENCE_LEVELS,
@@ -117,7 +117,9 @@ const questionToFormData = (question: Question, status = question.status): Quest
 
 export default function QuestionsPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [printQuestions, setPrintQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isPreparingPdf, setIsPreparingPdf] = useState(false);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState<QuestionFilters>({ page: 1, limit: 10 });
@@ -178,6 +180,27 @@ export default function QuestionsPage() {
       setQuestions((current) => current.map((item) => (item.id === question.id ? nextQuestion : item)));
     } finally {
       setBusyQuestionId(null);
+    }
+  };
+
+  const answerForQuestion = (question: Question) => {
+    const correctOptions = (question.options || [])
+      .filter((option) => option.isCorrect)
+      .map((option) => option.text)
+      .filter(Boolean);
+
+    if (correctOptions.length > 0) return correctOptions.join(', ');
+    return question.explanation || 'No official answer entered.';
+  };
+
+  const downloadQuestionBankPdf = async () => {
+    setIsPreparingPdf(true);
+    try {
+      const response = await api.getQuestions({ ...filters, page: 1, limit: Math.max(total, 1000) });
+      setPrintQuestions(response.data);
+      window.setTimeout(() => window.print(), 100);
+    } finally {
+      window.setTimeout(() => setIsPreparingPdf(false), 250);
     }
   };
 
@@ -286,12 +309,74 @@ export default function QuestionsPage() {
         title="Question Bank"
         breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Questions' }]}
         actions={
-          <Link href="/admin/questions/new">
-            <Button variant="primary">New Question</Button>
-          </Link>
+          <>
+            <Button type="button" variant="secondary" isLoading={isPreparingPdf} onClick={downloadQuestionBankPdf}>
+              Download Questions PDF
+            </Button>
+            <Link href="/admin/questions/new">
+              <Button variant="primary">New Question</Button>
+            </Link>
+          </>
         }
       />
       <div className="page-content">
+        <section className="question-bank-print-area">
+          <div className="question-bank-print-header">
+            <div>
+              <span>INNOVA Question Bank</span>
+              <h1>Questions and Answers</h1>
+            </div>
+            <strong>{(printQuestions.length ? printQuestions : questions).length} questions</strong>
+          </div>
+
+          <div className="question-bank-print-list">
+            {(printQuestions.length ? printQuestions : questions).map((question, index) => (
+              <article key={question.id} className="question-bank-print-item">
+                <div className="question-bank-print-item-header">
+                  <h2>{index + 1}. {question.text}</h2>
+                  <span>{question.points} pts</span>
+                </div>
+                <div className="question-bank-print-meta">
+                  <span>{labelFor(QUESTION_TYPES, normalizeQuestionType(question.type))}</span>
+                  <span>{labelFor(DIFFICULTIES, question.difficulty)}</span>
+                  <span>{labelFor(EXPERIENCE_LEVELS, question.experienceLevel)}</span>
+                  <span>{question.categoryName || question.category}</span>
+                </div>
+                {question.imageUrl && (
+                  <img
+                    className="question-bank-print-image"
+                    src={resolveApiAssetUrl(question.imageUrl)}
+                    alt="Question reference"
+                  />
+                )}
+                {question.options && question.options.length > 0 && (
+                  <ol className="question-bank-print-options">
+                    {question.options.map((option) => (
+                      <li key={option.id || option.order} className={option.isCorrect ? 'is-correct' : ''}>
+                        {option.text}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <div className="question-bank-print-answer">
+                  <label>Answer</label>
+                  <p>{answerForQuestion(question)}</p>
+                </div>
+                {question.rubric && question.rubric.length > 0 && (
+                  <div className="question-bank-print-rubric">
+                    <label>Rubric</label>
+                    {question.rubric.map((criterion) => (
+                      <p key={criterion.id || criterion.order}>
+                        <strong>{criterion.name}</strong> ({criterion.maxScore} pts): {criterion.description}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+
         <div className="admin-summary-strip">
           <div>
             <span>{total}</span>
