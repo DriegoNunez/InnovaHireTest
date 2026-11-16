@@ -40,6 +40,12 @@ ready ──start──▶ in_progress ──submit / time up──▶ submitted
 
 ## Running locally
 
+### Windows, one step
+
+Install [Node.js 22+](https://nodejs.org) and [Git](https://git-scm.com/download/win). Save [`scripts/Start-InnovaHire.ps1`](scripts/Start-InnovaHire.ps1) in the folder where you want the app, right-click it and choose **Run with PowerShell**. It clones (or updates) the code next to itself, creates `.env` with a random `AUTH_SECRET`, installs, seeds, builds and starts the app, then opens http://localhost:3000. Run it again any time to pull the latest code and restart.
+
+### Any platform
+
 Requires Node.js 22+.
 
 ```bash
