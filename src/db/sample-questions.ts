@@ -1,6 +1,10 @@
 import type { QuestionInput } from "@/lib/services/questions";
 
-type Sample = Omit<QuestionInput, "categoryId" | "status"> & { category: string };
+type Sample = Omit<QuestionInput, "categoryId" | "status" | "figureId" | "figureAlt"> & {
+  category: string;
+  /** SVG in src/db/figures, attached by the seed to questions that have no figure yet. */
+  figure?: { file: string; alt: string };
+};
 
 export const SAMPLE_CATEGORIES: { name: string; description: string }[] = [
   { name: "Structural Fundamentals", description: "Load paths, member behaviour and basic mechanics." },
@@ -19,6 +23,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "single_choice",
     experienceLevel: "entry",
     difficulty: 1,
+    figure: { file: "frame-load-path.svg", alt: "Elevation of a two-story building frame. Uniform roof and floor loads act downward on the roof and level 2 slabs, which bear on beams spanning between three vertical members that rest on spread footings below grade." },
     points: 5,
     prompt: "Which structural element primarily carries vertical floor loads down to the foundation?",
     explanation: "Columns transfer gravity loads from beams, slabs and framing down to the foundation.",
@@ -34,6 +39,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "single_choice",
     experienceLevel: "entry",
     difficulty: 1,
+    figure: { file: "wide-flange-section.svg", alt: "Cross-section of a W12x26 wide-flange steel shape labelled with overall depth d, flange width bf, flange thickness tf and web thickness tw, with the x-x and y-y axes." },
     points: 5,
     prompt: "In steel member notation, what does W12x26 identify?",
     explanation: "A W-shape designation gives the nominal depth (in.) and weight per foot (lb/ft).",
@@ -49,6 +55,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "single_choice",
     experienceLevel: "entry",
     difficulty: 1,
+    figure: { file: "rc-beam-section.svg", alt: "Simply supported reinforced concrete beam under a uniform load w, shown in elevation and as Section A-A. The section (width b, height h) has three larger longitudinal bars near the bottom, two smaller top bars and a closed stirrup." },
     points: 5,
     prompt: "What is the main purpose of the longitudinal reinforcing steel in a typical reinforced concrete beam?",
     explanation: "Concrete is strong in compression but weak in tension; reinforcement resists tension and controls cracking.",
@@ -64,6 +71,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "multiple_choice",
     experienceLevel: "entry",
     difficulty: 2,
+    figure: { file: "framing-plan.svg", alt: "Partial level 2 framing plan with gridlines A-C and 1-3 at 30 ft and 25 ft spacing, girders tagged W21x44 and W24x55, beams tagged W18x35 and W16x26 TYP., section callout 1/S-301, detail callout 3/S-501 at column A-3, a north arrow and the note TOP OF STEEL = 12'-6\" U.N.O." },
     points: 8,
     prompt: "Which items should you verify when reading a structural framing plan? Select all that apply.",
     explanation: "Plan review confirms gridlines, dimensions, member tags/schedule references and detail callouts.",
@@ -94,6 +102,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "true_false",
     experienceLevel: "entry",
     difficulty: 2,
+    figure: { file: "office-beam-dead-live.svg", alt: "Simply supported office floor beam of span l carrying a uniform dead load D (slab, framing, finishes) with a uniform office live load L above it." },
     points: 4,
     prompt: "True or false: for a typical office floor beam carrying only dead and live load, the LRFD combination 1.2D + 1.6L usually governs over 1.4D.",
     explanation: "1.4D only governs when live load is very small relative to dead load (L < D/8).",
@@ -107,6 +116,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "single_choice",
     experienceLevel: "entry",
     difficulty: 2,
+    figure: { file: "pinned-column.svg", alt: "Column of length L carrying an axial load P, pinned at the base and at the top, with the top braced laterally so it cannot sway." },
     points: 5,
     prompt: "What is the theoretical effective length factor K for a column that is pinned at both ends and braced against sidesway?",
     options: [
@@ -123,6 +133,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     difficulty: 2,
     points: 6,
     allowAttachment: true,
+    figure: { file: "simple-beam-point-load.svg", alt: "Simply supported beam AB spanning 20 ft, pinned at A and on a roller at B, with a 10-kip concentrated load P at midspan, 10 ft from each support. Self-weight is neglected." },
     prompt:
       "A simply supported beam spans 20 ft and carries a single concentrated load P = 10 kips at midspan. Neglect self-weight.\n\n1. Compute the maximum bending moment.\n2. Compute the maximum shear.\n\nShow your work. You may type it or upload a photo/PDF of hand calculations.",
     referenceAnswer: "Reactions R = P/2 = 5 kips each. Maximum shear V = 5 kips. Maximum moment at midspan M = PL/4 = 10 × 20 / 4 = 50 kip-ft.",
@@ -155,6 +166,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     difficulty: 3,
     points: 15,
     allowAttachment: true,
+    figure: { file: "steel-floor-beam-loads.svg", alt: "Simply supported W-shape floor beam spanning 24 ft with a uniform dead load wD = 0.65 kip/ft (including self-weight) and a uniform live load wL = 1.20 kip/ft; Fy = 50 ksi." },
     prompt:
       "A simply supported W-shape floor beam spans 24 ft and carries a uniform service dead load of 0.65 kip/ft and live load of 1.20 kip/ft (beam self-weight included in dead load). Fy = 50 ksi.\n\nDetermine the required flexural strength using LRFD and describe how you would select and check the beam.",
     referenceAnswer:
@@ -171,6 +183,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "long_answer",
     experienceLevel: "mid",
     difficulty: 4,
+    figure: { file: "special-structural-wall.svg", alt: "Special structural wall of length lw and height hw. The elevation shows lateral forces at each level and hatched boundary elements at both wall ends over the lower stories; the plan section shows confined boundary elements with hoops at each end and distributed web reinforcement between them." },
     points: 25,
     prompt: "Outline the checks you would perform for a reinforced concrete special structural wall boundary element in a region of high seismic demand (ACI 318).",
     referenceAnswer:
@@ -202,6 +215,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "multiple_choice",
     experienceLevel: "mid",
     difficulty: 3,
+    figure: { file: "seismic-base-shear.svg", alt: "Three-story building elevation with story weights w1, w2 and w3, lateral forces F1, F2 and F3 increasing with height, and the base shear V at the ground. V = Cs x W, where W = w1 + w2 + w3." },
     points: 8,
     prompt: "Using the ASCE 7 equivalent lateral force procedure, which changes increase the seismic base shear V = Cs·W? Select all that apply.",
     explanation: "Cs = SDS / (R / Ie): higher SDS or Ie increases Cs; higher R decreases it. V scales with W.",
@@ -218,6 +232,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "long_answer",
     experienceLevel: "senior",
     difficulty: 3,
+    figure: { file: "building-addition-plan.svg", alt: "Schematic key plan of an existing building with a new addition built against its east side; the interface between the two structures is highlighted." },
     points: 20,
     prompt: "You are reviewing the IBC code summary for an addition to an existing building. What items should be verified before finalizing the structural design criteria?",
     referenceAnswer:
@@ -248,6 +263,7 @@ export const SAMPLE_QUESTIONS: Sample[] = [
     type: "long_answer",
     experienceLevel: "senior",
     difficulty: 4,
+    figure: { file: "transfer-girder.svg", alt: "Elevation of a steel transfer girder spanning between two supporting columns and carrying two columns from the floors above, with loads P1 and P2. Spans between column lines are a, b and c." },
     points: 15,
     prompt: "A junior engineer hands you the calculation package for a steel transfer girder supporting two columns from the floors above. Describe how you would review it before it is issued.",
     referenceAnswer:

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { QuestionFigure } from "@/components/question-figure";
 import type { IntegrityEventType } from "@/db/schema";
 import type { getCandidateView } from "@/lib/services/exams";
 
@@ -396,6 +397,7 @@ export function ExamRunner({ initial, serverNow }: { initial: View; serverNow: s
           </div>
           <div className="space-y-5 px-5 py-5">
             <p className="prose-q text-base text-slate-900">{question.prompt}</p>
+            <QuestionFigure figure={question.figure} />
             <p className="text-sm text-slate-500">{TYPE_HINT[question.type]}</p>
 
             {question.options.length > 0 ? (

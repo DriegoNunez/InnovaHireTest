@@ -29,6 +29,8 @@ export default async function NewQuestionPage() {
             explanation: "",
             points: 5,
             allowAttachment: false,
+            figureId: null,
+            figureAlt: "",
             status: "draft",
             options: [
               { text: "", isCorrect: true },

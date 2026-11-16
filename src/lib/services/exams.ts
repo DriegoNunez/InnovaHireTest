@@ -3,6 +3,7 @@ import { z } from "zod";
 import { type DB, schema } from "@/db";
 import { DECISIONS, EXAM_STATUSES, EXPERIENCE_LEVELS, INTEGRITY_EVENT_TYPES, type QuestionSnapshot } from "@/db/schema";
 import { suggestDecision } from "@/lib/domain/decision";
+import { looksLike } from "@/lib/domain/file-types";
 import { assessIntegrity } from "@/lib/domain/integrity";
 import { gradeObjective, isObjective, round2, summarizeScore } from "@/lib/domain/scoring";
 import { selectBalanced, shuffle } from "@/lib/domain/selection";
@@ -88,6 +89,7 @@ export async function createExam(db: DB, actor: Actor, raw: unknown) {
           referenceAnswer: q.referenceAnswer,
           explanation: q.explanation,
           allowAttachment: q.allowAttachment,
+          figure: q.figureId ? { id: q.figureId, alt: q.figureAlt ?? "" } : null,
           // Option order is shuffled per exam (true/false keeps its natural order).
           options: (q.type === "true_false" ? q.options : shuffle(q.options)).map((o) => ({ id: o.id, text: o.text, isCorrect: o.isCorrect })),
           rubric: q.rubric.map((r) => ({ criterion: r.criterion, guidance: r.guidance, maxPoints: r.maxPoints })),
@@ -349,6 +351,7 @@ export async function getCandidateView(db: DB, examId: string) {
       type: q.snapshot.type,
       category: q.snapshot.categoryName,
       prompt: q.snapshot.prompt,
+      figure: q.snapshot.figure ?? null,
       allowAttachment: q.snapshot.allowAttachment,
       options: q.snapshot.options.map((o) => ({ id: o.id, text: o.text })),
     })),
@@ -409,25 +412,6 @@ export async function saveAnswer(db: DB, examId: string, raw: unknown) {
     .insert(schema.answers)
     .values({ examId, examQuestionId: question.id, ...values })
     .onConflictDoUpdate({ target: schema.answers.examQuestionId, set: values });
-}
-
-/** Light content sniffing so a renamed executable is not stored as a "PDF". */
-function looksLike(contentType: string, bytes: Buffer) {
-  const head = bytes.subarray(0, 12);
-  switch (contentType) {
-    case "application/pdf":
-      return head.subarray(0, 5).toString("latin1") === "%PDF-";
-    case "image/png":
-      return head[0] === 0x89 && head.subarray(1, 4).toString("latin1") === "PNG";
-    case "image/jpeg":
-      return head[0] === 0xff && head[1] === 0xd8;
-    case "image/gif":
-      return head.subarray(0, 4).toString("latin1") === "GIF8";
-    case "image/webp":
-      return head.subarray(0, 4).toString("latin1") === "RIFF" && head.subarray(8, 12).toString("latin1") === "WEBP";
-    default:
-      return false;
-  }
 }
 
 export async function addAttachment(db: DB, examId: string, file: { name: string; type: string; bytes: Buffer }) {
@@ -563,6 +547,7 @@ export async function gradeWrittenQuestions(db: DB, examId: string, grader: Grad
     try {
       const result = await grader.grade({
         prompt: q.snapshot.prompt,
+        figureDescription: q.snapshot.figure?.alt || null,
         referenceAnswer: q.snapshot.referenceAnswer,
         rubric: q.snapshot.rubric,
         experienceLevel: exam.experienceLevel,
@@ -701,6 +686,16 @@ export async function reopenReview(db: DB, actor: NonNullable<Actor>, examId: st
     .returning({ id: schema.exams.id });
   if (!row) throw new ServiceError("Only finalized exams can be reopened.");
   await audit(db, actor, "exam.reopen", "exam", examId);
+}
+
+/** True when the figure is part of a question in this exam (candidates may only load those). */
+export async function examShowsFigure(db: DB, examId: string, figureId: string) {
+  const rows = await db
+    .select({ id: schema.examQuestions.id })
+    .from(schema.examQuestions)
+    .where(and(eq(schema.examQuestions.examId, examId), sql`${schema.examQuestions.snapshot} -> 'figure' ->> 'id' = ${figureId}`))
+    .limit(1);
+  return rows.length > 0;
 }
 
 export async function getAttachment(db: DB, id: string) {

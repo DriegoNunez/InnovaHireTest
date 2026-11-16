@@ -4,6 +4,8 @@ import type { ExperienceLevel } from "@/db/schema";
 
 export type WrittenGradingInput = {
   prompt: string;
+  /** Text description of the figure shown with the question, if any. */
+  figureDescription?: string | null;
   referenceAnswer: string | null;
   rubric: { criterion: string; guidance: string | null; maxPoints: number }[];
   experienceLevel: ExperienceLevel;
@@ -135,7 +137,7 @@ function buildUserContent(input: WrittenGradingInput): Anthropic.Beta.BetaConten
 <question>
 ${input.prompt}
 </question>
-
+${input.figureDescription ? `\nThe candidate also saw a figure with the question. Its description:\n<figure_description>\n${input.figureDescription}\n</figure_description>\n` : ""}
 <reference_answer>
 ${input.referenceAnswer ?? "(none provided)"}
 </reference_answer>

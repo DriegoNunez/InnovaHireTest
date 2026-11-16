@@ -51,6 +51,8 @@ export default async function QuestionPage({ params, searchParams }: { params: P
             explanation: q.explanation ?? "",
             points: q.points,
             allowAttachment: q.allowAttachment,
+            figureId: q.figureId,
+            figureAlt: q.figureAlt ?? "",
             status: q.status,
             options: q.options.map((o) => ({ text: o.text, isCorrect: o.isCorrect })),
             rubric: q.rubric.map((r) => ({ criterion: r.criterion, guidance: r.guidance ?? "", maxPoints: r.maxPoints })),

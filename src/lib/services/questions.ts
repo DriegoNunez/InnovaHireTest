@@ -2,6 +2,7 @@ import { and, asc, desc, eq, ilike, inArray, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { type DB, schema } from "@/db";
 import { EXPERIENCE_LEVELS, QUESTION_STATUSES, QUESTION_TYPES, type QuestionStatus } from "@/db/schema";
+import { looksLike } from "@/lib/domain/file-types";
 import { isObjective } from "@/lib/domain/scoring";
 import { type Actor, audit, describeZodError, ServiceError } from "./common";
 
@@ -23,11 +24,15 @@ export const questionInput = z
     explanation: z.string().trim().max(5_000).optional().default(""),
     points: z.coerce.number().int().min(1).max(100),
     allowAttachment: z.boolean().default(false),
+    figureId: z.string().uuid().nullable().default(null),
+    figureAlt: z.string().trim().max(1_000).optional().default(""),
     status: z.enum(QUESTION_STATUSES).default("draft"),
     options: z.array(optionInput).default([]),
     rubric: z.array(criterionInput).default([]),
   })
   .superRefine((q, ctx) => {
+    if (q.figureId && !q.figureAlt)
+      ctx.addIssue({ code: "custom", path: ["figureAlt"], message: "Describe the figure (used by screen readers and the AI grader)" });
     if (isObjective(q.type)) {
       const correct = q.options.filter((o) => o.isCorrect).length;
       if (q.type === "true_false" && q.options.length !== 2) ctx.addIssue({ code: "custom", path: ["options"], message: "True/false questions need exactly two options" });
@@ -59,7 +64,14 @@ function parse(raw: unknown) {
     q.options = [];
   }
   if (isObjective(q.type)) q.allowAttachment = false;
+  if (!q.figureId) q.figureAlt = "";
   return q;
+}
+
+async function assertFigureExists(db: DB, figureId: string | null) {
+  if (!figureId) return;
+  const [row] = await db.select({ id: schema.figures.id }).from(schema.figures).where(eq(schema.figures.id, figureId));
+  if (!row) throw new ServiceError("The figure could not be found. Upload it again.", "not_found");
 }
 
 async function writeChildren(db: DB, questionId: string, q: ReturnType<typeof parse>) {
@@ -75,6 +87,7 @@ async function writeChildren(db: DB, questionId: string, q: ReturnType<typeof pa
 
 export async function createQuestion(db: DB, actor: Actor, raw: unknown) {
   const q = parse(raw);
+  await assertFigureExists(db, q.figureId);
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(schema.questions)
@@ -88,6 +101,8 @@ export async function createQuestion(db: DB, actor: Actor, raw: unknown) {
         explanation: q.explanation || null,
         points: q.points,
         allowAttachment: q.allowAttachment,
+        figureId: q.figureId,
+        figureAlt: q.figureAlt || null,
         status: q.status,
         createdBy: actor?.id ?? null,
       })
@@ -104,6 +119,7 @@ export async function createQuestion(db: DB, actor: Actor, raw: unknown) {
  */
 export async function updateQuestion(db: DB, actor: Actor, id: string, raw: unknown) {
   const q = parse(raw);
+  await assertFigureExists(db, q.figureId);
   await db.transaction(async (tx) => {
     const [row] = await tx
       .update(schema.questions)
@@ -117,6 +133,8 @@ export async function updateQuestion(db: DB, actor: Actor, id: string, raw: unkn
         explanation: q.explanation || null,
         points: q.points,
         allowAttachment: q.allowAttachment,
+        figureId: q.figureId,
+        figureAlt: q.figureAlt || null,
         status: q.status,
         updatedAt: new Date(),
       })
@@ -234,4 +252,29 @@ export async function loadQuestionsForSnapshot(db: DB, ids: string[]) {
     options: options.filter((o) => o.questionId === q.id),
     rubric: rubric.filter((r) => r.questionId === q.id),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Figures
+// ---------------------------------------------------------------------------
+
+export const MAX_FIGURE_BYTES = 5 * 1024 * 1024;
+export const FIGURE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"] as const;
+
+/** Stores an image for use as a question figure. Returns its id; attach it by saving the question. */
+export async function addFigure(db: DB, actor: Actor, file: { name: string; type: string; bytes: Buffer }) {
+  if (!(FIGURE_TYPES as readonly string[]).includes(file.type)) throw new ServiceError("Upload an image (PNG, JPG, WebP, GIF or SVG).");
+  if (file.bytes.length === 0) throw new ServiceError("The file is empty.");
+  if (file.bytes.length > MAX_FIGURE_BYTES) throw new ServiceError("Figures must be 5 MB or smaller.");
+  if (!looksLike(file.type, file.bytes)) throw new ServiceError("The file content does not match its type, or the SVG contains scripts.");
+  const [row] = await db
+    .insert(schema.figures)
+    .values({ fileName: file.name.slice(0, 200) || "figure", contentType: file.type, size: file.bytes.length, data: file.bytes, createdBy: actor?.id ?? null })
+    .returning({ id: schema.figures.id, fileName: schema.figures.fileName });
+  return row;
+}
+
+export async function getFigure(db: DB, id: string) {
+  const [row] = await db.select().from(schema.figures).where(eq(schema.figures.id, id));
+  return row ?? null;
 }

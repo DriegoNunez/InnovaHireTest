@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { FormMessage, SubmitButton } from "@/components/forms";
+import { QuestionFigure } from "@/components/question-figure";
 import type { ActionState } from "@/lib/actions";
 import { EXPERIENCE_LEVELS, QUESTION_STATUSES, QUESTION_TYPES, type QuestionType } from "@/db/schema";
 import { EXPERIENCE_LABELS, QUESTION_STATUS_LABELS, QUESTION_TYPE_LABELS } from "@/lib/labels";
@@ -19,6 +20,8 @@ export type QuestionFormValue = {
   explanation: string;
   points: number;
   allowAttachment: boolean;
+  figureId: string | null;
+  figureAlt: string;
   status: string;
   options: Option[];
   rubric: Criterion[];
@@ -116,6 +119,13 @@ export function QuestionForm({
           <textarea id="prompt" rows={6} className="input" value={q.prompt} onChange={(e) => set("prompt", e.target.value)} required placeholder="State the problem, givens, and what the candidate must provide." />
         </div>
 
+        <FigureField
+          figureId={q.figureId}
+          figureAlt={q.figureAlt}
+          readOnly={readOnly}
+          onChange={(patch) => setQ((v) => ({ ...v, ...patch }))}
+        />
+
         {objective ? (
           <fieldset>
             <legend className="label">Options <span className="font-normal text-slate-500">— {q.type === "multiple_choice" ? "tick every correct option" : "tick the one correct option"}</span></legend>
@@ -176,5 +186,74 @@ export function QuestionForm({
       {!readOnly && <SubmitButton>Save question</SubmitButton>}
       <FormMessage state={state} />
     </form>
+  );
+}
+
+function FigureField({
+  figureId,
+  figureAlt,
+  readOnly,
+  onChange,
+}: {
+  figureId: string | null;
+  figureAlt: string;
+  readOnly?: boolean;
+  onChange: (patch: { figureId?: string | null; figureAlt?: string }) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setError("");
+    if (file.size > 5 * 1024 * 1024) return setError("Figures must be 5 MB or smaller.");
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/figures", { method: "POST", body: form });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return setError(body.error ?? "Upload failed. Try again.");
+      onChange({ figureId: body.id });
+    } catch {
+      setError("Upload failed. Check your connection and try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <fieldset className="space-y-3">
+      <legend className="label">Figure <span className="font-normal text-slate-500">— optional diagram, section or plan shown under the question</span></legend>
+      {figureId ? (
+        <>
+          <QuestionFigure figure={{ id: figureId, alt: figureAlt }} />
+          <div>
+            <label className="label" htmlFor="figureAlt">Figure description</label>
+            <textarea
+              id="figureAlt"
+              rows={2}
+              className="input"
+              value={figureAlt}
+              onChange={(e) => onChange({ figureAlt: e.target.value })}
+              placeholder="What the figure shows, including any values on it. Read by screen readers and given to the AI grader."
+            />
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-slate-500">No figure.</p>
+      )}
+      {!readOnly && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className={`btn-secondary btn-sm cursor-pointer ${uploading ? "pointer-events-none opacity-50" : ""}`}>
+            {uploading ? "Uploading…" : figureId ? "Replace figure" : "Add figure"}
+            <input type="file" className="sr-only" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+          {figureId && <button type="button" className="btn-ghost btn-sm" onClick={() => onChange({ figureId: null, figureAlt: "" })}>Remove figure</button>}
+          <span className="hint mt-0">PNG, JPG, WebP, GIF or SVG, up to 5 MB.</span>
+        </div>
+      )}
+      {error && <p className="text-sm text-red-700" role="alert">{error}</p>}
+    </fieldset>
   );
 }

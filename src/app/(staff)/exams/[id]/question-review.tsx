@@ -1,4 +1,5 @@
 import { ActionForm, SubmitButton } from "@/components/forms";
+import { QuestionFigure } from "@/components/question-figure";
 import { Badge, formatDate } from "@/components/ui";
 import { isObjective } from "@/lib/domain/scoring";
 import type { getExamDetail } from "@/lib/services/exams";
@@ -40,6 +41,7 @@ export function QuestionReview({ examId, item, showAnswers, canGrade, typeLabel 
 
       <div className="space-y-4 px-5 py-4">
         <p className="prose-q text-slate-900">{snapshot.prompt}</p>
+        <QuestionFigure figure={snapshot.figure} />
 
         {objective && (
           <ul className="space-y-1.5">

@@ -141,6 +141,21 @@ export const categories = pgTable(
   (t) => [uniqueIndex("categories_name_idx").on(t.name)],
 );
 
+/**
+ * Images shown with a question (diagrams, sections, plans). Rows are immutable and never
+ * deleted: exam snapshots keep pointing at the figure the candidate saw, even after the
+ * question is edited to use a different one.
+ */
+export const figures = pgTable("figures", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  size: integer("size").notNull(),
+  data: bytea("data").notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const questions = pgTable(
   "questions",
   {
@@ -157,6 +172,9 @@ export const questions = pgTable(
     explanation: text("explanation"),
     points: integer("points").notNull(),
     allowAttachment: boolean("allow_attachment").notNull().default(false),
+    /** Optional figure shown with the question, and its text alternative. */
+    figureId: uuid("figure_id").references(() => figures.id),
+    figureAlt: text("figure_alt"),
     status: questionStatusEnum("status").notNull().default("draft"),
     createdBy: uuid("created_by").references(() => users.id),
     ...timestamps,
@@ -217,6 +235,8 @@ export type QuestionSnapshot = {
   referenceAnswer: string | null;
   explanation: string | null;
   allowAttachment: boolean;
+  /** Absent on exams generated before figures existed. */
+  figure?: { id: string; alt: string } | null;
   options: { id: string; text: string; isCorrect: boolean }[];
   rubric: { criterion: string; guidance: string | null; maxPoints: number }[];
 };

@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, isNotNull, sql } from "drizzle-orm";
 import { createPgliteDb, type DB, schema } from "@/db";
-import { seedDatabase } from "@/db/seed";
+import { SAMPLE_QUESTIONS } from "@/db/sample-questions";
+import { attachSampleFigures, seedDatabase } from "@/db/seed";
 import { createCandidate } from "@/lib/services/candidates";
 import type { Grader, WrittenGradingInput } from "@/lib/services/ai-grader";
 import { ServiceError } from "@/lib/services/common";
@@ -9,6 +10,7 @@ import {
   acceptAiGrade,
   addAttachment,
   createExam,
+  examShowsFigure,
   finalizeExam,
   getCandidateView,
   getExamDetail,
@@ -25,7 +27,7 @@ import {
   sweepOverdueExams,
 } from "@/lib/services/exams";
 import { authenticate, createUser, updateUser } from "@/lib/services/users";
-import { createQuestion, listCategories } from "@/lib/services/questions";
+import { addFigure, createQuestion, listCategories } from "@/lib/services/questions";
 
 let db: DB;
 let admin: { id: string; email: string };
@@ -89,6 +91,58 @@ describe("question validation", () => {
         rubric: [{ criterion: "Path", maxPoints: 4 }],
       }),
     ).rejects.toThrow(/must add up/);
+  });
+});
+
+describe("question figures", () => {
+  it("seeds a figure for every sample question that has one, only once", async () => {
+    const withFigure = await db.select({ id: schema.questions.id }).from(schema.questions).where(isNotNull(schema.questions.figureId));
+    expect(withFigure).toHaveLength(SAMPLE_QUESTIONS.filter((q) => q.figure).length);
+    expect(await attachSampleFigures(db)).toBe(0);
+    const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.figures);
+    expect(Number(count)).toBe(withFigure.length);
+  });
+
+  it("only accepts images, and rejects SVGs with active content", async () => {
+    expect(await addFigure(db, admin, { name: "plan.png", type: "image/png", bytes: PNG })).toHaveProperty("id");
+    const svg = (body: string) => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg">${body}</svg>`);
+    expect(await addFigure(db, admin, { name: "ok.svg", type: "image/svg+xml", bytes: svg("<rect width='1' height='1'/>") })).toHaveProperty("id");
+    await expect(addFigure(db, admin, { name: "x.svg", type: "image/svg+xml", bytes: svg("<script>alert(1)</script>") })).rejects.toThrow(ServiceError);
+    await expect(addFigure(db, admin, { name: "x.svg", type: "image/svg+xml", bytes: svg("<rect onload='alert(1)'/>") })).rejects.toThrow(ServiceError);
+    await expect(addFigure(db, admin, { name: "x.pdf", type: "application/pdf", bytes: Buffer.from("%PDF-1.7") })).rejects.toThrow(ServiceError);
+    await expect(addFigure(db, admin, { name: "fake.png", type: "image/png", bytes: Buffer.from("not an image") })).rejects.toThrow(ServiceError);
+  });
+
+  it("requires a description when a question has a figure", async () => {
+    const [cat] = await listCategories(db);
+    const figure = await addFigure(db, admin, { name: "f.png", type: "image/png", bytes: PNG });
+    const base = {
+      categoryId: cat.id,
+      type: "single_choice" as const,
+      experienceLevel: "entry" as const,
+      difficulty: 2,
+      points: 5,
+      prompt: "Which support is shown in the figure?",
+      options: [{ text: "Pin", isCorrect: true }, { text: "Fixed", isCorrect: false }],
+    };
+    await expect(createQuestion(db, admin, { ...base, figureId: figure.id })).rejects.toThrow(/Describe the figure/);
+    const { id } = await createQuestion(db, admin, { ...base, figureId: figure.id, figureAlt: "A pin support." });
+    const [row] = await db.select().from(schema.questions).where(eq(schema.questions.id, id));
+    expect(row).toMatchObject({ figureId: figure.id, figureAlt: "A pin support." });
+    await db.update(schema.questions).set({ status: "archived" }).where(eq(schema.questions.id, id));
+  });
+
+  it("freezes figures into the exam and shows them to that candidate only", async () => {
+    const candidate = await newCandidate("figures@example.com", "senior");
+    const { exam } = await createExam(db, admin, { candidateId: candidate.id, experienceLevel: "senior", questionCount: 3, timeLimitMinutes: 60, linkValidDays: 7 });
+    const view = (await getCandidateView(db, exam.id))!;
+    const figures = view.questions.map((q) => q.figure).filter((f) => f !== null);
+    expect(figures.length).toBe(SAMPLE_QUESTIONS.filter((q) => q.experienceLevel === "senior" && q.figure).length);
+    expect(figures.every((f) => f.alt.length > 0)).toBe(true);
+    expect(await examShowsFigure(db, exam.id, figures[0].id)).toBe(true);
+    const other = await db.select({ id: schema.figures.id }).from(schema.figures).where(eq(schema.figures.fileName, "framing-plan.svg"));
+    expect(await examShowsFigure(db, exam.id, other[0].id)).toBe(false);
+    await revokeExam(db, admin, exam.id);
   });
 });
 
