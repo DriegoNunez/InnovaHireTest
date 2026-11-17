@@ -70,7 +70,12 @@ export function QuestionForm({
 
   return (
     <form action={formAction} className="space-y-6">
-      <input type="hidden" name="payload" value={JSON.stringify({ ...q, points: objective ? q.points : rubricTotal || q.points })} />
+      <input
+        type="hidden"
+        name="payload"
+        // Send only what applies to the type: blank options left over from a choice question would fail validation.
+        value={JSON.stringify({ ...q, options: objective ? q.options : [], rubric: objective ? [] : q.rubric, points: objective ? q.points : rubricTotal || q.points })}
+      />
       <fieldset disabled={readOnly} className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>

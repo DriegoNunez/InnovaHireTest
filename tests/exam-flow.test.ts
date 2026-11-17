@@ -1,8 +1,11 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq, isNotNull, sql } from "drizzle-orm";
 import { createPgliteDb, type DB, schema } from "@/db";
-import { SAMPLE_QUESTIONS } from "@/db/sample-questions";
-import { attachSampleFigures, seedDatabase } from "@/db/seed";
+import fs from "node:fs";
+import path from "node:path";
+import { SAMPLE_CATEGORIES, SAMPLE_QUESTIONS } from "@/db/sample-questions";
+import { RETIRED_SAMPLES } from "@/db/sample-questions/retired";
+import { attachSampleFigures, enableSampleUploads, loadSampleQuestions, retireSampleQuestions, seedDatabase } from "@/db/seed";
 import { createCandidate } from "@/lib/services/candidates";
 import type { Grader, WrittenGradingInput } from "@/lib/services/ai-grader";
 import { ServiceError } from "@/lib/services/common";
@@ -44,6 +47,7 @@ class HalfGrader implements Grader {
       confidence: "medium" as const,
       concerns: [],
       model: this.model,
+      responseId: `fake-resp-${this.calls.length}`,
     };
   }
 }
@@ -94,6 +98,89 @@ describe("question validation", () => {
   });
 });
 
+describe("sample question bank", () => {
+  it("has at least three questions per category at every level, with unique keys and existing figures", () => {
+    for (const c of SAMPLE_CATEGORIES) {
+      for (const level of ["entry", "mid", "senior"] as const) {
+        const n = SAMPLE_QUESTIONS.filter((q) => q.category === c.name && q.experienceLevel === level).length;
+        expect(n, `${c.name} / ${level}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+    expect(new Set(SAMPLE_QUESTIONS.map((q) => q.key)).size).toBe(SAMPLE_QUESTIONS.length);
+    for (const q of SAMPLE_QUESTIONS.filter((q) => q.figure)) {
+      expect(fs.existsSync(path.join(process.cwd(), "src", "db", "figures", q.figure!.file)), q.figure!.file).toBe(true);
+    }
+  });
+
+  it("is all written questions that accept a photo or PDF of the solution", () => {
+    for (const q of SAMPLE_QUESTIONS) {
+      expect(["short_answer", "long_answer"], q.key).toContain(q.type);
+      expect(q.allowAttachment, q.key).toBe(true);
+      expect(q.rubric?.length, q.key).toBeGreaterThan(0);
+    }
+    const current = new Set(SAMPLE_QUESTIONS.map((q) => q.key));
+    expect(RETIRED_SAMPLES.filter((r) => current.has(r.key))).toEqual([]);
+  });
+
+  it("loads every sample once, published, in its category", async () => {
+    const rows = await db
+      .select({ prompt: schema.questions.prompt, status: schema.questions.status, category: schema.categories.name })
+      .from(schema.questions)
+      .innerJoin(schema.categories, eq(schema.questions.categoryId, schema.categories.id));
+    for (const q of SAMPLE_QUESTIONS) {
+      expect(rows.filter((r) => r.prompt === q.prompt), q.key).toEqual([{ prompt: q.prompt, status: "published", category: q.category }]);
+    }
+    expect(await seedDatabase(db, { sampleQuestions: true })).toContain("Sample questions are already loaded.");
+  });
+
+  it("never re-adds a sample that staff edited or deleted, and adopts banks seeded before keys", async () => {
+    const fresh = await createPgliteDb();
+    expect(await loadSampleQuestions(fresh)).toBe(SAMPLE_QUESTIONS.length);
+    // A bank seeded before keys existed has the questions but no records of them.
+    await fresh.delete(schema.auditLogs).where(eq(schema.auditLogs.action, "question.sample"));
+    expect(await loadSampleQuestions(fresh)).toBe(0);
+    const [first, second] = SAMPLE_QUESTIONS;
+    await fresh.update(schema.questions).set({ prompt: "Edited by staff: which element carries floor loads?" }).where(eq(schema.questions.prompt, first.prompt));
+    await fresh.delete(schema.questions).where(eq(schema.questions.prompt, second.prompt));
+    expect(await loadSampleQuestions(fresh)).toBe(0);
+    const [{ count }] = await fresh.select({ count: sql<number>`count(*)::int` }).from(schema.questions);
+    expect(Number(count)).toBe(SAMPLE_QUESTIONS.length - 1);
+  });
+});
+
+describe("upgrading a bank seeded with older sample questions", () => {
+  it("archives the old choice versions unless staff edited them", async () => {
+    const fresh = await createPgliteDb();
+    await loadSampleQuestions(fresh);
+    const [cat] = await listCategories(fresh);
+    const old = (prompt: string) =>
+      createQuestion(fresh, null, {
+        categoryId: cat.id, type: "single_choice", experienceLevel: "entry", difficulty: 1, points: 5, status: "published", prompt,
+        options: [{ text: "A", isCorrect: true }, { text: "B", isCorrect: false }],
+      });
+    const untouched = await old(RETIRED_SAMPLES[0].prompt);
+    const edited = await old(`${RETIRED_SAMPLES[1].prompt} (edited by staff)`);
+    expect(await retireSampleQuestions(fresh)).toBe(1);
+    expect(await retireSampleQuestions(fresh)).toBe(0);
+    const statusOf = async (id: string) => (await fresh.select().from(schema.questions).where(eq(schema.questions.id, id)))[0].status;
+    expect(await statusOf(untouched.id)).toBe("archived");
+    expect(await statusOf(edited.id)).toBe("published");
+  });
+
+  it("turns on uploads once for written samples, and respects staff turning them off later", async () => {
+    const fresh = await createPgliteDb();
+    await loadSampleQuestions(fresh);
+    const sample = SAMPLE_QUESTIONS[0];
+    const setUploads = (on: boolean) => fresh.update(schema.questions).set({ allowAttachment: on }).where(eq(schema.questions.prompt, sample.prompt));
+    await setUploads(false); // as loaded before uploads were allowed on every sample
+    expect(await enableSampleUploads(fresh)).toBe(1);
+    await setUploads(false); // a later choice by staff
+    expect(await enableSampleUploads(fresh)).toBe(0);
+    const [row] = await fresh.select().from(schema.questions).where(eq(schema.questions.prompt, sample.prompt));
+    expect(row.allowAttachment).toBe(false);
+  });
+});
+
 describe("question figures", () => {
   it("seeds a figure for every sample question that has one, only once", async () => {
     const withFigure = await db.select({ id: schema.questions.id }).from(schema.questions).where(isNotNull(schema.questions.figureId));
@@ -134,7 +221,8 @@ describe("question figures", () => {
 
   it("freezes figures into the exam and shows them to that candidate only", async () => {
     const candidate = await newCandidate("figures@example.com", "senior");
-    const { exam } = await createExam(db, admin, { candidateId: candidate.id, experienceLevel: "senior", questionCount: 3, timeLimitMinutes: 60, linkValidDays: 7 });
+    // Ask for more than the senior bank holds so every senior question (and figure) is included.
+    const { exam } = await createExam(db, admin, { candidateId: candidate.id, experienceLevel: "senior", questionCount: 100, timeLimitMinutes: 60, linkValidDays: 7 });
     const view = (await getCandidateView(db, exam.id))!;
     const figures = view.questions.map((q) => q.figure).filter((f) => f !== null);
     expect(figures.length).toBe(SAMPLE_QUESTIONS.filter((q) => q.experienceLevel === "senior" && q.figure).length);
@@ -149,6 +237,13 @@ describe("question figures", () => {
 describe("exam lifecycle", () => {
   it("runs from creation to a finalized decision", async () => {
     const candidate = await newCandidate("flow@example.com");
+    // The sample bank is all written; staff can still add choice questions, which are auto-graded.
+    const [cat] = await listCategories(db);
+    await createQuestion(db, admin, {
+      categoryId: cat.id, type: "single_choice", experienceLevel: "entry", difficulty: 1, points: 4, status: "published",
+      prompt: "Which support allows rotation but no translation?",
+      options: [{ text: "Pin", isCorrect: true }, { text: "Fixed", isCorrect: false }, { text: "Roller", isCorrect: false }],
+    });
     const { exam, token, shortfall } = await createExam(db, admin, {
       candidateId: candidate.id,
       experienceLevel: "entry",
@@ -157,7 +252,7 @@ describe("exam lifecycle", () => {
       linkValidDays: 7,
       sendInvitation: true,
     });
-    expect(shortfall).toBeGreaterThan(0); // only 9 entry questions exist
+    expect(shortfall).toBeGreaterThan(0); // the entry bank has fewer than 50 questions
     const outbox = await db.select().from(schema.emailOutbox).where(eq(schema.emailOutbox.examId, exam.id));
     expect(outbox[0].body).toContain(token);
     await expect(
@@ -196,12 +291,15 @@ describe("exam lifecycle", () => {
     let detail = (await getExamDetail(db, exam.id))!;
     expect(detail.exam.status).toBe("submitted"); // written answers still ungraded
     const objective = detail.items.filter((i) => i.snapshot.options.length);
+    expect(objective).toHaveLength(1);
     expect(objective.every((i) => i.grade?.points === i.points && i.grade?.source === "auto")).toBe(true);
     await expect(saveAnswer(db, exam.id, { examQuestionId: questions[0].id })).rejects.toThrow(/ended/);
 
     const grader = new HalfGrader();
     await processSubmission(db, exam.id, grader);
     expect(grader.calls.some((c) => c.attachment?.contentType === "image/png")).toBe(true);
+    // Each call is tagged with where the answer came from, and the provider's ID is saved with the draft.
+    expect(grader.calls.every((c) => c.trace?.examId === exam.id && c.trace.examQuestionId && c.trace.category)).toBe(true);
     detail = (await getExamDetail(db, exam.id))!;
     expect(detail.exam.status).toBe("graded");
     expect(detail.score.needsReview).toBe(grader.calls.length);
@@ -210,6 +308,7 @@ describe("exam lifecycle", () => {
     await expect(finalizeExam(db, admin, exam.id, { decision: "hire" })).rejects.toThrow(/need review/);
 
     const written = detail.items.filter((i) => i.grade?.source === "ai");
+    expect(written.every((i) => i.grade?.aiResponseId?.startsWith("fake-resp-"))).toBe(true);
     await setManualGrade(db, admin, written[0].id, { points: written[0].points, feedback: "Fully correct on review." });
     for (const item of written.slice(1)) await acceptAiGrade(db, admin, item.id);
 

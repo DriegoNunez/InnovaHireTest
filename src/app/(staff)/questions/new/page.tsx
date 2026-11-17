@@ -21,24 +21,19 @@ export default async function NewQuestionPage() {
           categories={categories.map((c) => ({ id: c.id, name: c.name }))}
           initial={{
             categoryId: "",
-            type: "single_choice",
+            type: "short_answer",
             experienceLevel: "entry",
             difficulty: 2,
             prompt: "",
             referenceAnswer: "",
             explanation: "",
-            points: 5,
-            allowAttachment: false,
+            points: 10,
+            allowAttachment: true,
             figureId: null,
             figureAlt: "",
             status: "draft",
-            options: [
-              { text: "", isCorrect: true },
-              { text: "", isCorrect: false },
-              { text: "", isCorrect: false },
-              { text: "", isCorrect: false },
-            ],
-            rubric: [],
+            options: [],
+            rubric: [{ criterion: "", guidance: "", maxPoints: 10 }],
           }}
         />
       </div>

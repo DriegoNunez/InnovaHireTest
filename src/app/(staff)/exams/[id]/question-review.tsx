@@ -126,6 +126,9 @@ export function QuestionReview({ examId, item, showAnswers, canGrade, typeLabel 
             )}
             <p className="mt-2 text-xs text-slate-400">
               {grade.source === "ai" && `Drafted by ${grade.model} · confidence ${grade.confidence ?? "—"}`}
+              {grade.source === "ai" && grade.aiResponseId && (
+                <> · <span className="select-all font-mono" title="The AI provider's ID for this request, to find it in its logs">{grade.aiResponseId}</span></>
+              )}
               {grade.reviewedByName && `${grade.source === "ai" ? " · " : ""}Reviewed by ${grade.reviewedByName} ${formatDate(grade.reviewedAt)}`}
             </p>
           </div>

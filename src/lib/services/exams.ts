@@ -512,6 +512,36 @@ export async function gradeObjectiveQuestions(db: DB, examId: string) {
 }
 
 /**
+ * One server-log line per AI grading call: exam and question IDs, model, the provider's response
+ * ID (to find the call in its logs), tokens, time and result. No candidate details or answer text.
+ */
+function logGradingTrace(t: {
+  examId: string;
+  position: number;
+  category: string;
+  ok: boolean;
+  model: string;
+  responseId?: string | null;
+  usage?: { inputTokens: number; outputTokens: number } | null;
+  ms: number;
+  attachment: string | null;
+  detail: string;
+}) {
+  if (process.env.NODE_ENV === "test") return;
+  const parts = [
+    `exam ${t.examId.slice(0, 8)}`,
+    `Q${t.position} ${t.category}`,
+    t.model,
+    t.responseId ?? "no response id",
+    t.usage ? `${t.usage.inputTokens.toLocaleString("en-US")} in / ${t.usage.outputTokens.toLocaleString("en-US")} out tokens` : null,
+    `${(t.ms / 1000).toFixed(1)} s`,
+    t.attachment ? `with ${t.attachment}` : null,
+    t.ok ? t.detail : `FAILED: ${t.detail}`,
+  ];
+  (t.ok ? console.info : console.warn)(`[grading] ${parts.filter(Boolean).join(" · ")}`);
+}
+
+/**
  * Drafts grades for written answers with the AI grader. Blank answers get 0 automatically.
  * Answers already graded by a person are skipped; earlier AI drafts are replaced when `regrade` is set.
  */
@@ -544,6 +574,8 @@ export async function gradeWrittenQuestions(db: DB, examId: string, grader: Grad
       if (file) attachment = { fileName: file.fileName, contentType: file.contentType, data: file.data };
     }
 
+    const trace = { examId, examQuestionId: q.id, questionId: q.questionId, position: q.position, category: q.snapshot.categoryName };
+    const started = Date.now();
     try {
       const result = await grader.grade({
         prompt: q.snapshot.prompt,
@@ -553,10 +585,11 @@ export async function gradeWrittenQuestions(db: DB, examId: string, grader: Grad
         experienceLevel: exam.experienceLevel,
         answerText: answer?.text ?? null,
         attachment,
+        trace,
       });
-      const points = round2(result.criteria.reduce((s, c) => s + c.points, 0));
+      const points = Math.min(round2(result.criteria.reduce((s, c) => s + c.points, 0)), q.points);
       await upsertGrade(db, examId, q.id, {
-        points: Math.min(points, q.points),
+        points,
         maxPoints: q.points,
         source: "ai",
         feedback: result.feedback,
@@ -564,14 +597,27 @@ export async function gradeWrittenQuestions(db: DB, examId: string, grader: Grad
         confidence: result.confidence,
         concerns: result.concerns,
         model: result.model,
+        aiResponseId: result.responseId ?? null,
         needsReview: true,
         reviewedBy: null,
         reviewedAt: null,
       });
       graded++;
+      logGradingTrace({
+        ...trace,
+        ok: true,
+        model: result.model,
+        responseId: result.responseId,
+        usage: result.usage,
+        ms: Date.now() - started,
+        attachment: attachment?.contentType ?? null,
+        detail: `${points}/${q.points} (${result.confidence})${result.concerns.length ? ` · ${result.concerns.length} concern(s)` : ""}`,
+      });
     } catch (error) {
       failed++;
-      errors.push(error instanceof GradingUnavailableError ? error.message : `AI grading failed: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof GradingUnavailableError ? error.message : `AI grading failed: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(message);
+      logGradingTrace({ ...trace, ok: false, model: grader.model, ms: Date.now() - started, attachment: attachment?.contentType ?? null, detail: message });
     }
   }
   await refreshExamStatus(db, examId);

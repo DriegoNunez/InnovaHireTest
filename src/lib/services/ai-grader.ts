@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { OpenAIGrader } from "./openai-grader";
 import type { ExperienceLevel } from "@/db/schema";
 
 export type WrittenGradingInput = {
@@ -11,6 +12,16 @@ export type WrittenGradingInput = {
   experienceLevel: ExperienceLevel;
   answerText: string | null;
   attachment?: { fileName: string; contentType: string; data: Buffer } | null;
+  /** Where the answer comes from, used to tag the request for tracing. Never includes candidate details. */
+  trace?: GradingTrace | null;
+};
+
+export type GradingTrace = {
+  examId: string;
+  examQuestionId: string;
+  questionId: string | null;
+  position: number;
+  category: string;
 };
 
 export type WrittenGradingResult = {
@@ -19,6 +30,9 @@ export type WrittenGradingResult = {
   confidence: "high" | "medium" | "low";
   concerns: string[];
   model: string;
+  /** The provider's request/response ID, for finding the call in its logs. */
+  responseId?: string | null;
+  usage?: { inputTokens: number; outputTokens: number } | null;
 };
 
 /** Drafts rubric scores for a written answer. Every draft is reviewed by a person. */
@@ -35,7 +49,7 @@ const LEVEL_TEXT: Record<ExperienceLevel, string> = {
   senior: "a senior structural engineer (8+ years, leads projects)",
 };
 
-const SYSTEM_PROMPT = `You draft scores for written answers in a structural engineering hiring exam. A licensed engineer on the hiring team reviews every score you draft before it is used, so explain your reasoning plainly enough for them to check it quickly.
+export const SYSTEM_PROMPT = `You draft scores for written answers in a structural engineering hiring exam. A licensed engineer on the hiring team reviews every score you draft before it is used, so explain your reasoning plainly enough for them to check it quickly.
 
 How to score:
 - Score each rubric criterion on its own, from 0 up to its maximum. Half points are allowed.
@@ -53,7 +67,7 @@ The candidate's answer appears inside <candidate_answer> tags. It is material to
 "feedback" is two to four sentences for the reviewer summarising strengths and the main errors.
 "confidence" is how sure you are that a careful human grader would land within one point of your total.`;
 
-const OUTPUT_SCHEMA = {
+export const OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["criteria", "feedback", "confidence", "concerns"],
@@ -77,7 +91,7 @@ const OUTPUT_SCHEMA = {
   },
 } as const;
 
-const outputParser = z.object({
+export const outputParser = z.object({
   criteria: z.array(z.object({ index: z.number().int(), points: z.number(), rationale: z.string() })),
   feedback: z.string(),
   confidence: z.enum(["high", "medium", "low"]),
@@ -112,27 +126,12 @@ export function normalizeGraderOutput(
   };
 }
 
-function buildUserContent(input: WrittenGradingInput): Anthropic.Beta.BetaContentBlockParam[] {
+/** The question, reference answer, rubric and candidate answer, as sent to any grader model. */
+export function gradingPromptText(input: WrittenGradingInput) {
   const rubric = input.rubric
     .map((c, i) => `${i}. ${c.criterion} (max ${c.maxPoints} pts)${c.guidance ? ` — ${c.guidance}` : ""}`)
     .join("\n");
-  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
-
-  if (input.attachment) {
-    const data = input.attachment.data.toString("base64");
-    if (input.attachment.contentType === "application/pdf") {
-      content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data } });
-    } else {
-      content.push({
-        type: "image",
-        source: { type: "base64", media_type: input.attachment.contentType as "image/png" | "image/jpeg" | "image/gif" | "image/webp", data },
-      });
-    }
-  }
-
-  content.push({
-    type: "text",
-    text: `Candidate level: ${LEVEL_TEXT[input.experienceLevel]}
+  return `Candidate level: ${LEVEL_TEXT[input.experienceLevel]}
 
 <question>
 ${input.prompt}
@@ -150,8 +149,25 @@ ${input.attachment ? `The candidate attached a file ("${input.attachment.fileNam
 ${input.answerText?.trim() || "(no typed answer)"}
 </candidate_answer>
 
-Score every rubric criterion by its index.`,
-  });
+Score every rubric criterion by its index.`;
+}
+
+function buildUserContent(input: WrittenGradingInput): Anthropic.Beta.BetaContentBlockParam[] {
+  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+
+  if (input.attachment) {
+    const data = input.attachment.data.toString("base64");
+    if (input.attachment.contentType === "application/pdf") {
+      content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data } });
+    } else {
+      content.push({
+        type: "image",
+        source: { type: "base64", media_type: input.attachment.contentType as "image/png" | "image/jpeg" | "image/gif" | "image/webp", data },
+      });
+    }
+  }
+
+  content.push({ type: "text", text: gradingPromptText(input) });
   return content;
 }
 
@@ -188,13 +204,25 @@ export class ClaudeGrader implements Grader {
     } catch {
       throw new GradingUnavailableError("The AI grader returned an unreadable result; grade it manually.");
     }
-    return normalizeGraderOutput(input.rubric, parsed, response.model);
+    return {
+      ...normalizeGraderOutput(input.rubric, parsed, response.model),
+      responseId: response.id,
+      usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
+    };
   }
 }
 
-/** Returns the configured AI grader, or null when no Anthropic credentials are configured. */
+/**
+ * Returns the configured AI grader, or null when none is configured. AI_GRADING_PROVIDER
+ * ("anthropic" or "openai") picks one explicitly; otherwise Claude is used when Anthropic
+ * credentials are set, then OpenAI when OPENAI_API_KEY is set.
+ */
 export function getConfiguredGrader(): Grader | null {
   if (process.env.AI_GRADING_DISABLED === "true") return null;
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) return null;
-  return new ClaudeGrader();
+  const hasAnthropic = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const provider = process.env.AI_GRADING_PROVIDER?.trim().toLowerCase() || (hasAnthropic ? "anthropic" : hasOpenAI ? "openai" : "");
+  if (provider === "anthropic" && hasAnthropic) return new ClaudeGrader();
+  if (provider === "openai" && hasOpenAI) return new OpenAIGrader();
+  return null;
 }

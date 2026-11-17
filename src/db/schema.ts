@@ -344,6 +344,8 @@ export const grades = pgTable(
     /** AI-produced scores must be confirmed (or changed) by a human before finalizing. */
     needsReview: boolean("needs_review").notNull().default(false),
     model: text("model"),
+    /** The AI provider's ID for the request that drafted this grade (e.g. OpenAI "resp_…"), for tracing. */
+    aiResponseId: text("ai_response_id"),
     reviewedBy: uuid("reviewed_by").references(() => users.id),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     ...timestamps,

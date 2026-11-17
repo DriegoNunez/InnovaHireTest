@@ -181,8 +181,8 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
                   <h2 className="font-semibold">AI grading assistant</h2>
                   <p className="text-sm text-slate-600">
                     {aiConfigured
-                      ? "Claude drafts rubric scores for written answers. Every draft must be accepted or changed by an engineer."
-                      : "Not configured: set ANTHROPIC_API_KEY to have written answers drafted automatically. You can still grade by hand below."}
+                      ? "The AI grader drafts rubric scores for written answers, including uploaded photos and PDFs. Every draft must be accepted or changed by an engineer."
+                      : "Not configured: set ANTHROPIC_API_KEY or OPENAI_API_KEY to have written answers drafted automatically. You can still grade by hand below."}
                   </p>
                 </div>
                 {aiConfigured && (

@@ -439,13 +439,13 @@ export function ExamRunner({ initial, serverNow }: { initial: View; serverNow: s
                   maxLength={20000}
                   onChange={(e) => update({ text: e.target.value }, 900)}
                   onBlur={() => dirty.current.has(question.id) && void persist(question.id)}
-                  placeholder="Type your answer. Include units and state any assumptions."
+                  placeholder={question.allowAttachment ? "Type your answer, or upload a photo of your handwritten solution below. Include units and state any assumptions." : "Type your answer. Include units and state any assumptions."}
                   spellCheck={false}
                 />
                 {question.allowAttachment && (
                   <div className="rounded-lg border border-dashed border-slate-300 p-4">
-                    <div className="text-sm font-medium text-slate-700">Hand calculations or sketch (optional)</div>
-                    <p className="text-xs text-slate-500">Upload one photo or PDF (max 10 MB). A new upload replaces the previous one.</p>
+                    <div className="text-sm font-medium text-slate-700">Upload your solution (photo or PDF)</div>
+                    <p className="text-xs text-slate-500">You can type your answer, upload a photo or PDF of your handwritten work, or both. One file per question, max 10 MB; a new upload replaces the previous one.</p>
                     {answer.attachment && (
                       <div className="mt-2 flex items-center gap-2 text-sm">
                         <span className="badge bg-emerald-100 text-emerald-800">Attached</span>
