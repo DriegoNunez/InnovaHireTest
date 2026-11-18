@@ -12,7 +12,7 @@ import { INTEGRITY_LABELS } from "@/lib/domain/integrity";
 import { isObjective } from "@/lib/domain/scoring";
 import { scheduleGrading } from "@/lib/grading-jobs";
 import { EXPERIENCE_LABELS, QUESTION_TYPE_LABELS } from "@/lib/labels";
-import { getConfiguredGrader } from "@/lib/services/ai-grader";
+import { aiGradingStatus } from "@/lib/services/ai-grader";
 import { expireIfOverdue, getExamDetail } from "@/lib/services/exams";
 import { finalizeAction, reissueLinkAction, reopenAction, revokeExamAction, runAiGradingAction } from "../actions";
 import { LinkPanel } from "./link-panel";
@@ -40,7 +40,8 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
   const reviewing = exam.status === "submitted" || exam.status === "graded";
   const finished = reviewing || exam.status === "finalized";
   const canGrade = can(user.role, "gradeExams") && reviewing;
-  const aiConfigured = Boolean(getConfiguredGrader());
+  const ai = aiGradingStatus();
+  const aiConfigured = ai.enabled;
   const writtenUngraded = items.filter((i) => !isObjective(i.snapshot.type) && !i.grade).length;
   const durationMin =
     exam.startedAt && exam.submittedAt ? Math.round((exam.submittedAt.getTime() - exam.startedAt.getTime()) / 60_000) : null;
@@ -180,9 +181,9 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
                 <div>
                   <h2 className="font-semibold">AI grading assistant</h2>
                   <p className="text-sm text-slate-600">
-                    {aiConfigured
-                      ? "The AI grader drafts rubric scores for written answers, including uploaded photos and PDFs. Every draft must be accepted or changed by an engineer."
-                      : "Not configured: set ANTHROPIC_API_KEY or OPENAI_API_KEY to have written answers drafted automatically. You can still grade by hand below."}
+                    {ai.enabled
+                      ? `${ai.providerLabel} (${ai.model}) drafts rubric scores for written answers, including uploaded photos and PDFs. Every draft must be accepted or changed by an engineer.`
+                      : `AI grading is off: ${ai.reason}. You can still grade by hand below.`}
                   </p>
                 </div>
                 {aiConfigured && (

@@ -5,7 +5,7 @@ import { getDb } from "@/db";
 import { type ActionState, attempt, formObject } from "@/lib/actions";
 import { rolesFor } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/session";
-import { getConfiguredGrader } from "@/lib/services/ai-grader";
+import { aiGradingStatus, getConfiguredGrader } from "@/lib/services/ai-grader";
 import { ServiceError } from "@/lib/services/common";
 import {
   acceptAiGrade,
@@ -45,7 +45,10 @@ export async function runAiGradingAction(examId: string, _: ActionState, formDat
   const user = await requireUser(rolesFor("gradeExams"));
   return attempt(async () => {
     const grader = getConfiguredGrader();
-    if (!grader) throw new ServiceError("AI grading is not configured. Set ANTHROPIC_API_KEY on the server.");
+    if (!grader) {
+      const status = aiGradingStatus();
+      throw new ServiceError(`AI grading is off: ${status.enabled ? "no grader available" : status.reason}.`);
+    }
     const regrade = formData.get("regrade") === "1";
     const result = await gradeWrittenQuestions(await getDb(), examId, grader, { regrade });
     refresh(examId);

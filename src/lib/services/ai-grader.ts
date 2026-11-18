@@ -226,3 +226,21 @@ export function getConfiguredGrader(): Grader | null {
   if (provider === "openai" && hasOpenAI) return new OpenAIGrader();
   return null;
 }
+
+export type AiGradingStatus =
+  | { enabled: true; provider: "anthropic" | "openai"; providerLabel: string; model: string }
+  | { enabled: false; reason: string };
+
+/** Which AI grader is active (provider and model), or why AI grading is off, for staff pages. */
+export function aiGradingStatus(): AiGradingStatus {
+  const grader = getConfiguredGrader();
+  if (grader instanceof OpenAIGrader) return { enabled: true, provider: "openai", providerLabel: "OpenAI", model: grader.model };
+  if (grader) return { enabled: true, provider: "anthropic", providerLabel: "Anthropic (Claude)", model: grader.model };
+
+  if (process.env.AI_GRADING_DISABLED === "true") return { enabled: false, reason: "it is turned off with AI_GRADING_DISABLED=true" };
+  const chosen = process.env.AI_GRADING_PROVIDER?.trim().toLowerCase();
+  if (chosen === "openai") return { enabled: false, reason: "AI_GRADING_PROVIDER is openai but OPENAI_API_KEY is not set" };
+  if (chosen === "anthropic") return { enabled: false, reason: "AI_GRADING_PROVIDER is anthropic but ANTHROPIC_API_KEY is not set" };
+  if (chosen) return { enabled: false, reason: `AI_GRADING_PROVIDER must be "anthropic" or "openai" (it is "${chosen}")` };
+  return { enabled: false, reason: "no AI key is set (ANTHROPIC_API_KEY or OPENAI_API_KEY)" };
+}

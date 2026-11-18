@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type OpenAI from "openai";
-import { ClaudeGrader, GradingUnavailableError, getConfiguredGrader, type WrittenGradingInput } from "@/lib/services/ai-grader";
+import { aiGradingStatus, ClaudeGrader, GradingUnavailableError, getConfiguredGrader, type WrittenGradingInput } from "@/lib/services/ai-grader";
 import { OpenAIGrader, traceMetadata } from "@/lib/services/openai-grader";
 
 const INPUT: WrittenGradingInput = {
@@ -107,5 +107,24 @@ describe("choosing the grader", () => {
     expect(getConfiguredGrader()).toBeNull();
     env({ OPENAI_API_KEY: "test", AI_GRADING_DISABLED: "true" });
     expect(getConfiguredGrader()).toBeNull();
+  });
+
+  it("reports which provider is active, or why AI grading is off", () => {
+    env({ OPENAI_API_KEY: "test" });
+    expect(aiGradingStatus()).toMatchObject({ enabled: true, provider: "openai", providerLabel: "OpenAI" });
+    env({ ANTHROPIC_API_KEY: "test", OPENAI_API_KEY: "test" });
+    expect(aiGradingStatus()).toMatchObject({ enabled: true, provider: "anthropic" });
+    env({ ANTHROPIC_API_KEY: "test", OPENAI_API_KEY: "test", AI_GRADING_PROVIDER: "openai" });
+    expect(aiGradingStatus()).toMatchObject({ enabled: true, provider: "openai" });
+
+    const reason = () => { const s = aiGradingStatus(); return s.enabled ? null : s.reason; };
+    env({});
+    expect(reason()).toMatch(/ANTHROPIC_API_KEY or OPENAI_API_KEY/);
+    env({ ANTHROPIC_API_KEY: "test", AI_GRADING_PROVIDER: "openai" });
+    expect(reason()).toMatch(/OPENAI_API_KEY is not set/);
+    env({ OPENAI_API_KEY: "test", AI_GRADING_PROVIDER: "gemini" });
+    expect(reason()).toMatch(/must be "anthropic" or "openai"/);
+    env({ OPENAI_API_KEY: "test", AI_GRADING_DISABLED: "true" });
+    expect(reason()).toMatch(/AI_GRADING_DISABLED/);
   });
 });

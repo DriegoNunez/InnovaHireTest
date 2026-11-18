@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { requireUser } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { sweepAndSchedule } from "@/lib/grading-jobs";
+import { aiGradingStatus } from "@/lib/services/ai-grader";
 import { getDashboard } from "@/lib/services/dashboard";
 import { DECISION_LABELS } from "@/lib/domain/decision";
 import type { Decision } from "@/db/schema";
@@ -16,7 +17,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const { denied } = await searchParams;
   await sweepAndSchedule();
   const d = await getDashboard(await getDb());
-  const aiEnabled = Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) && process.env.AI_GRADING_DISABLED !== "true";
+  const ai = aiGradingStatus();
 
   return (
     <>
@@ -26,11 +27,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         actions={can(user.role, "manageCandidates") && <Link href="/candidates/new" className="btn-primary">Add candidate</Link>}
       />
       {denied && <div className="mb-4"><Alert tone="warning">Your role does not have access to that page.</Alert></div>}
-      {!aiEnabled && (
-        <div className="mb-4">
-          <Alert tone="info">AI grading is off (no <code>ANTHROPIC_API_KEY</code>). Written answers will wait for an engineer to grade them.</Alert>
-        </div>
-      )}
+      <div className="mb-4">
+        {ai.enabled ? (
+          <Alert tone="info">
+            AI grading is on: <strong>{ai.providerLabel}</strong> (<code>{ai.model}</code>) drafts scores for written answers. An engineer reviews every draft.
+          </Alert>
+        ) : (
+          <Alert tone="warning">AI grading is off: {ai.reason}. Written answers will wait for an engineer to grade them.</Alert>
+        )}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Awaiting review" value={(d.byStatus.submitted ?? 0) + (d.byStatus.graded ?? 0)} hint="Submitted exams not yet finalized" href="/exams?status=graded" />
