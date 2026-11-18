@@ -142,6 +142,7 @@ async function categoryIdFor(db: DB, name: string, cache: Map<string, string>) {
 }
 
 const FIGURES_DIR = path.join(process.cwd(), "src", "db", "figures");
+const FIGURE_TYPE_BY_EXTENSION: Record<string, string> = { ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
 
 /**
  * Gives each sample question its figure when the question (matched by its exact text) has
@@ -157,7 +158,9 @@ export async function attachSampleFigures(db: DB) {
       .where(and(eq(schema.questions.prompt, sample.prompt), isNull(schema.questions.figureId)));
     if (!targets.length) continue;
     const bytes = fs.readFileSync(path.join(FIGURES_DIR, sample.figure.file));
-    const figure = await addFigure(db, null, { name: sample.figure.file, type: "image/svg+xml", bytes });
+    const type = FIGURE_TYPE_BY_EXTENSION[path.extname(sample.figure.file).toLowerCase()];
+    if (!type) throw new Error(`Unsupported figure file type: ${sample.figure.file}`);
+    const figure = await addFigure(db, null, { name: sample.figure.file, type, bytes });
     for (const { id } of targets) {
       await db.update(schema.questions).set({ figureId: figure.id, figureAlt: sample.figure.alt, updatedAt: new Date() }).where(eq(schema.questions.id, id));
       await audit(db, null, "question.figure", "question", id, { file: sample.figure.file });

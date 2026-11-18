@@ -100,12 +100,16 @@ describe("question validation", () => {
 
 describe("sample question bank", () => {
   it("has at least three questions per category at every level, with unique keys and existing figures", () => {
+    // The INNOVA Engineering Test is the firm's fixed graduate test, so it only has entry-level questions.
+    const fixedTests = new Set(["INNOVA Engineering Test"]);
     for (const c of SAMPLE_CATEGORIES) {
       for (const level of ["entry", "mid", "senior"] as const) {
         const n = SAMPLE_QUESTIONS.filter((q) => q.category === c.name && q.experienceLevel === level).length;
+        if (fixedTests.has(c.name) && level !== "entry") continue;
         expect(n, `${c.name} / ${level}`).toBeGreaterThanOrEqual(3);
       }
     }
+    expect(SAMPLE_QUESTIONS.filter((q) => q.category === "INNOVA Engineering Test")).toHaveLength(11);
     expect(new Set(SAMPLE_QUESTIONS.map((q) => q.key)).size).toBe(SAMPLE_QUESTIONS.length);
     for (const q of SAMPLE_QUESTIONS.filter((q) => q.figure)) {
       expect(fs.existsSync(path.join(process.cwd(), "src", "db", "figures", q.figure!.file)), q.figure!.file).toBe(true);
