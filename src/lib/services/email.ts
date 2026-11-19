@@ -34,5 +34,7 @@ export async function sendEmail(db: DB, email: OutgoingEmail) {
 }
 
 export function appUrl() {
-  return (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const fallback = vercelHost ? `https://${vercelHost}` : "http://localhost:3000";
+  return (process.env.APP_URL || fallback).replace(/\/$/, "");
 }

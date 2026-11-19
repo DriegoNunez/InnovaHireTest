@@ -13,10 +13,15 @@ const MIGRATIONS_FOLDER = path.join(process.cwd(), "drizzle");
 type Holder = { promise?: Promise<DB> };
 const holder: Holder = ((globalThis as unknown as { __innovaDb?: Holder }).__innovaDb ??= {});
 
+/** PostgreSQL connection string: `DATABASE_URL`, or `POSTGRES_URL` as set by Vercel's database integrations. */
+export function databaseUrl(): string | undefined {
+  return process.env.DATABASE_URL || process.env.POSTGRES_URL || undefined;
+}
+
 /**
  * Returns the shared database connection.
  *
- * - `DATABASE_URL` set → PostgreSQL via node-postgres (run `npm run db:migrate` on deploy).
+ * - `DATABASE_URL` (or `POSTGRES_URL`) set → PostgreSQL via node-postgres (run `npm run db:migrate` on deploy).
  * - otherwise → embedded PGlite persisted under `PGLITE_DIR` (default `./.data/pglite`),
  *   migrated automatically on first use. Intended for local development and demos.
  */
@@ -29,12 +34,20 @@ export function getDb(): Promise<DB> {
 }
 
 async function connect(): Promise<DB> {
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   if (url) {
     const { Pool } = await import("pg");
     const { drizzle } = await import("drizzle-orm/node-postgres");
-    const pool = new Pool({ connectionString: url, max: Number(process.env.DATABASE_POOL_SIZE ?? 10) });
+    // Serverless functions each hold their own pool, so keep it small there.
+    const defaultSize = process.env.VERCEL ? 3 : 10;
+    const pool = new Pool({ connectionString: url, max: Number(process.env.DATABASE_POOL_SIZE ?? defaultSize) });
     return drizzle(pool, { schema }) as unknown as DB;
+  }
+  if (process.env.VERCEL) {
+    throw new Error(
+      "No database configured. On Vercel the embedded database cannot be used: add a Postgres database " +
+        "(Storage → Neon) or set DATABASE_URL, then redeploy. See README → Deploy on Vercel.",
+    );
   }
 
   const dir = path.resolve(/*turbopackIgnore: true*/ process.env.PGLITE_DIR ?? "./.data/pglite");

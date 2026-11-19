@@ -64,8 +64,8 @@ With no `DATABASE_URL`, the app uses an embedded Postgres ([PGlite](https://pgli
 | Variable | Purpose |
 | --- | --- |
 | `AUTH_SECRET` | **Required in production.** 32+ random characters for signing session cookies. |
-| `APP_URL` | Public URL used in invitation links. |
-| `DATABASE_URL` | PostgreSQL connection string. Omit for embedded PGlite. |
+| `APP_URL` | Public URL used in invitation links. On Vercel it defaults to the production URL. |
+| `DATABASE_URL` | PostgreSQL connection string (`POSTGRES_URL` also accepted). Omit for embedded PGlite. |
 | `ANTHROPIC_API_KEY` | Enables AI grading drafts. Without it, written answers wait for manual grading. |
 | `AI_GRADING_MODEL` | Defaults to `claude-opus-5-5`. |
 | `SMTP_URL`, `EMAIL_FROM` | Send invitations by email. Without them, emails are stored in the outbox table and printed to the server log. |
@@ -81,6 +81,19 @@ npm run db:migrate
 npm run db:seed           # first deploy only
 npm run build && npm start
 ```
+
+### Deploy on Vercel
+
+Vercel's servers have no persistent disk, so the embedded database can't be used there; the app needs a hosted PostgreSQL database.
+
+1. In the Vercel project, open **Storage → Create Database → Neon** (free tier is fine) and connect it to the project. This sets `DATABASE_URL`. Any other PostgreSQL works too: set `DATABASE_URL` (or `POSTGRES_URL`) yourself.
+2. Under **Settings → Environment Variables**, add:
+   - `AUTH_SECRET`: 32+ random characters (e.g. the output of `openssl rand -base64 48`).
+   - `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`: the first admin account (password 10+ characters, not the example value).
+   - Optional: `ANTHROPIC_API_KEY`, `SMTP_URL`, `EMAIL_FROM`, `APP_URL` (defaults to the project's production URL).
+3. **Deployments → Redeploy.**
+
+During the build, `scripts/vercel-prepare.ts` (npm `prebuild`, active only on Vercel) checks these settings, applies migrations, creates the admin if missing and loads the sample questions into an empty bank. If something is missing, the build fails with a message saying what to add, and the previous deployment stays live. Login rate limiting is kept in memory, so on serverless it is per instance.
 
 AI grading runs right after the candidate submits (via Next.js `after()`), and again for exams that time out the next time staff open the dashboard or exam list. Engineers can also start it from the exam page.
 
