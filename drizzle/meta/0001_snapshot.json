@@ -1,5 +1,5 @@
 {
-  "id": "aee9d50d-7f9e-4eb3-8a3e-13ca1d707a79",
+  "id": "6d9db0e5-bd6c-409c-88db-e348e46ba203",
   "prevId": "d088d49f-64ef-483a-9082-bffdb215e8e6",
   "version": "7",
   "dialect": "postgresql",
@@ -130,7 +130,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.attachments": {
       "name": "attachments",
@@ -201,7 +201,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.audit_logs": {
       "name": "audit_logs",
@@ -294,7 +294,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.candidates": {
       "name": "candidates",
@@ -426,7 +426,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.categories": {
       "name": "categories",
@@ -481,7 +481,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.email_outbox": {
       "name": "email_outbox",
@@ -566,7 +566,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.exam_questions": {
       "name": "exam_questions",
@@ -678,7 +678,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.exams": {
       "name": "exams",
@@ -915,78 +915,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.figures": {
-      "name": "figures",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "file_name": {
-          "name": "file_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content_type": {
-          "name": "content_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "size": {
-          "name": "size",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "data": {
-          "name": "data",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "figures_created_by_users_id_fk": {
-          "name": "figures_created_by_users_id_fk",
-          "tableFrom": "figures",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.grades": {
       "name": "grades",
@@ -1156,7 +1085,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.integrity_events": {
       "name": "integrity_events",
@@ -1232,7 +1161,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.question_options": {
       "name": "question_options",
@@ -1291,7 +1220,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.questions": {
       "name": "questions",
@@ -1362,18 +1291,6 @@
           "notNull": true,
           "default": false
         },
-        "figure_id": {
-          "name": "figure_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "figure_alt": {
-          "name": "figure_alt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "status": {
           "name": "status",
           "type": "question_status",
@@ -1440,19 +1357,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "questions_figure_id_figures_id_fk": {
-          "name": "questions_figure_id_figures_id_fk",
-          "tableFrom": "questions",
-          "tableTo": "figures",
-          "columnsFrom": [
-            "figure_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "questions_created_by_users_id_fk": {
           "name": "questions_created_by_users_id_fk",
           "tableFrom": "questions",
@@ -1471,7 +1375,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.rubric_criteria": {
       "name": "rubric_criteria",
@@ -1535,7 +1439,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.users": {
       "name": "users",
@@ -1623,7 +1527,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     }
   },
   "enums": {

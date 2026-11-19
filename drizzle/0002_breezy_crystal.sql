@@ -1,1 +1,0 @@
-ALTER TABLE "grades" ADD COLUMN "ai_response_id" text;

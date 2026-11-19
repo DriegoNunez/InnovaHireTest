@@ -1,6 +1,6 @@
 {
-  "id": "9e5fcc1d-aba6-410e-9d96-49fc9795b93c",
-  "prevId": "aee9d50d-7f9e-4eb3-8a3e-13ca1d707a79",
+  "id": "ea3b5aa2-4391-42f5-946d-8dbf294e85a6",
+  "prevId": "6d9db0e5-bd6c-409c-88db-e348e46ba203",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -130,7 +130,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.attachments": {
       "name": "attachments",
@@ -201,7 +201,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.audit_logs": {
       "name": "audit_logs",
@@ -294,7 +294,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.candidates": {
       "name": "candidates",
@@ -426,7 +426,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.categories": {
       "name": "categories",
@@ -481,7 +481,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.email_outbox": {
       "name": "email_outbox",
@@ -566,7 +566,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.exam_questions": {
       "name": "exam_questions",
@@ -678,7 +678,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.exams": {
       "name": "exams",
@@ -915,7 +915,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.figures": {
       "name": "figures",
@@ -986,7 +986,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.grades": {
       "name": "grades",
@@ -1162,7 +1162,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.integrity_events": {
       "name": "integrity_events",
@@ -1238,7 +1238,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.question_options": {
       "name": "question_options",
@@ -1297,7 +1297,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.questions": {
       "name": "questions",
@@ -1477,7 +1477,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.rubric_criteria": {
       "name": "rubric_criteria",
@@ -1541,7 +1541,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.users": {
       "name": "users",
@@ -1629,7 +1629,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     }
   },
   "enums": {

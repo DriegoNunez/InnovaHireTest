@@ -1,7 +1,7 @@
 import "./env";
-import { getDb, migratePostgres } from "../src/db";
+import { databaseUrl, getDb, migratePostgres } from "../src/db";
 
-const url = process.env.DATABASE_URL;
+const url = databaseUrl();
 if (url) {
   await migratePostgres(url);
   console.log("PostgreSQL migrations applied.");

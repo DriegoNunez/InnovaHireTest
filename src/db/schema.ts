@@ -107,6 +107,10 @@ const timestamps = {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 };
 
+// Every table enables row-level security with no policies. The app connects as the
+// table owner, which bypasses RLS, while hosts that expose tables through an
+// auto-generated API (e.g. Supabase's Data API) deny those requests.
+
 // ---------------------------------------------------------------------------
 // Staff
 // ---------------------------------------------------------------------------
@@ -124,7 +128,7 @@ export const users = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("users_email_idx").on(sql`lower(${t.email})`)],
-);
+).enableRLS();
 
 // ---------------------------------------------------------------------------
 // Question bank
@@ -139,7 +143,7 @@ export const categories = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("categories_name_idx").on(t.name)],
-);
+).enableRLS();
 
 /**
  * Images shown with a question (diagrams, sections, plans). Rows are immutable and never
@@ -154,7 +158,7 @@ export const figures = pgTable("figures", {
   data: bytea("data").notNull(),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 export const questions = pgTable(
   "questions",
@@ -180,7 +184,7 @@ export const questions = pgTable(
     ...timestamps,
   },
   (t) => [index("questions_bank_idx").on(t.status, t.experienceLevel)],
-);
+).enableRLS();
 
 export const questionOptions = pgTable("question_options", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -190,7 +194,7 @@ export const questionOptions = pgTable("question_options", {
   text: text("text").notNull(),
   isCorrect: boolean("is_correct").notNull().default(false),
   position: integer("position").notNull(),
-});
+}).enableRLS();
 
 export const rubricCriteria = pgTable("rubric_criteria", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -201,7 +205,7 @@ export const rubricCriteria = pgTable("rubric_criteria", {
   guidance: text("guidance"),
   maxPoints: integer("max_points").notNull(),
   position: integer("position").notNull(),
-});
+}).enableRLS();
 
 // ---------------------------------------------------------------------------
 // Candidates & exams
@@ -225,7 +229,7 @@ export const candidates = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("candidates_email_idx").on(sql`lower(${t.email})`)],
-);
+).enableRLS();
 
 /** Frozen copy of a question as it was when the exam was generated. */
 export type QuestionSnapshot = {
@@ -273,7 +277,7 @@ export const exams = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("exams_token_idx").on(t.tokenHash), index("exams_candidate_idx").on(t.candidateId)],
-);
+).enableRLS();
 
 export const examQuestions = pgTable(
   "exam_questions",
@@ -289,7 +293,7 @@ export const examQuestions = pgTable(
     snapshot: jsonb("snapshot").$type<QuestionSnapshot>().notNull(),
   },
   (t) => [index("exam_questions_exam_idx").on(t.examId)],
-);
+).enableRLS();
 
 export const attachments = pgTable("attachments", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -301,7 +305,7 @@ export const attachments = pgTable("attachments", {
   size: integer("size").notNull(),
   data: bytea("data").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 export const answers = pgTable(
   "answers",
@@ -320,7 +324,7 @@ export const answers = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("answers_exam_question_idx").on(t.examQuestionId)],
-);
+).enableRLS();
 
 export type CriterionScore = { criterion: string; points: number; maxPoints: number; rationale: string };
 
@@ -351,7 +355,7 @@ export const grades = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("grades_exam_question_idx").on(t.examQuestionId)],
-);
+).enableRLS();
 
 export const integrityEvents = pgTable(
   "integrity_events",
@@ -365,7 +369,7 @@ export const integrityEvents = pgTable(
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("integrity_events_exam_idx").on(t.examId)],
-);
+).enableRLS();
 
 export const emailOutbox = pgTable("email_outbox", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -377,7 +381,7 @@ export const emailOutbox = pgTable("email_outbox", {
   error: text("error"),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 export const auditLogs = pgTable(
   "audit_logs",
@@ -392,4 +396,4 @@ export const auditLogs = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("audit_logs_created_idx").on(t.createdAt)],
-);
+).enableRLS();

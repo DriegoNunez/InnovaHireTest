@@ -1,8 +1,9 @@
 import "./env";
-import { getDb, migratePostgres } from "../src/db";
+import { databaseUrl, getDb, migratePostgres } from "../src/db";
 import { seedDatabase } from "../src/db/seed";
 
-if (process.env.DATABASE_URL) await migratePostgres(process.env.DATABASE_URL);
+const url = databaseUrl();
+if (url) await migratePostgres(url);
 const db = await getDb();
 
 const email = process.env.SEED_ADMIN_EMAIL;

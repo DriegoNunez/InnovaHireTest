@@ -40,6 +40,12 @@ ready ──start──▶ in_progress ──submit / time up──▶ submitted
 
 ## Running locally
 
+### Windows, one step
+
+Install [Node.js 22+](https://nodejs.org) and [Git](https://git-scm.com/download/win). Save [`scripts/Start-InnovaHire.ps1`](scripts/Start-InnovaHire.ps1) in the folder where you want the app, right-click it and choose **Run with PowerShell**. It clones (or updates) the code next to itself, creates `.env` with a random `AUTH_SECRET`, installs, seeds, builds and starts the app, then opens http://localhost:3000. Run it again any time to pull the latest code and restart.
+
+### Any platform
+
 Requires Node.js 22+.
 
 ```bash
@@ -60,11 +66,11 @@ With no `DATABASE_URL`, the app uses an embedded Postgres ([PGlite](https://pgli
 | Variable | Purpose |
 | --- | --- |
 | `AUTH_SECRET` | **Required in production.** 32+ random characters for signing session cookies. |
-| `APP_URL` | Public URL used in invitation links. |
-| `DATABASE_URL` | PostgreSQL connection string. Omit for embedded PGlite. |
+| `APP_URL` | Public URL used in invitation links. On Vercel it defaults to the production URL. |
+| `DATABASE_URL` | PostgreSQL connection string (`POSTGRES_URL` also accepted). Omit for embedded PGlite. |
 | `ANTHROPIC_API_KEY` | Enables AI grading drafts with Claude. Without an AI key, written answers wait for manual grading. |
 | `OPENAI_API_KEY`, `OPENAI_GRADING_MODEL` | Alternative AI grader using OpenAI (Responses API, structured output; default model `gpt-5.5`). Used when no Anthropic key is set. |
-| `AI_GRADING_PROVIDER` | `anthropic` or `openai`, to choose when both keys are set. |
+| `AI_GRADING_PROVIDER` | `anthropic` or `openai`, to choose when both keys are set. The dashboard shows which one is active. |
 | `OPENAI_STORE_RESPONSES` | `true` keeps each OpenAI grading call (answers included, at least 30 days) so it appears in the OpenAI dashboard under Logs → Responses, tagged with `exam_id`, `exam_question_id`, `question_id`, `position`, `category` and `level`. Off by default. |
 | `AI_GRADING_MODEL` | Defaults to `claude-opus-5-5`. |
 | `SMTP_URL`, `EMAIL_FROM` | Send invitations by email. Without them, emails are stored in the outbox table and printed to the server log. |
@@ -82,6 +88,21 @@ npm run build && npm start
 ```
 
 Every AI grading call writes one `[grading]` line to the server log (exam and question, model, the provider's response ID, tokens, time and result; no candidate details), and the response ID is saved with the draft and shown on the review page.
+
+### Deploy on Vercel
+
+Vercel's servers have no persistent disk, so the embedded database can't be used there; the app needs a hosted PostgreSQL database.
+
+1. In the Vercel project, open **Storage → Create Database**, choose **Supabase** or **Neon** (free tiers are fine) and connect it to the project. This sets `POSTGRES_URL` (Supabase) or `DATABASE_URL` (Neon). Any other PostgreSQL works too: set `DATABASE_URL` yourself. With a Supabase project created outside Vercel, use the **Transaction pooler** connection string from **Connect** in the Supabase dashboard as `DATABASE_URL`.
+2. Under **Settings → Environment Variables**, add:
+   - `AUTH_SECRET`: 32+ random characters (e.g. the output of `openssl rand -base64 48`).
+   - `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`: the first admin account (password 10+ characters, not the example value).
+   - Optional: `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` (AI grading), `SMTP_URL`, `EMAIL_FROM`, `APP_URL` (defaults to the project's production URL).
+3. **Deployments → Redeploy.**
+
+During the build, `scripts/vercel-prepare.ts` (npm `prebuild`, active only on Vercel) checks these settings, applies migrations, creates the admin if missing and loads or upgrades the sample questions (see `db:seed` above). If something is missing, the build fails with a message saying what to add, and the previous deployment stays live. Login rate limiting is kept in memory, so on serverless it is per instance.
+
+Notes for Supabase: its servers use certificates from Supabase's own CA, which node-postgres rejects under `sslmode=require`, so for `*.supabase.co`/`*.supabase.com` hosts the app uses libpq semantics (`uselibpqcompat=true`: always encrypted, CA not verified). To verify the CA instead, add `sslmode=verify-full&sslrootcert=<path to Supabase's CA>` to the URL. Every table has row-level security enabled with no policies, so Supabase's auto-generated Data API can't read them; the app connects as the table owner and is unaffected. Free Supabase projects pause after a week without activity.
 
 AI grading runs right after the candidate submits (via Next.js `after()`), and again for exams that time out the next time staff open the dashboard or exam list. Engineers can also start it from the exam page.
 
