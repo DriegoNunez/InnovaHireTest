@@ -19,6 +19,30 @@ export function databaseUrl(): string | undefined {
 }
 
 /**
+ * Adjusts a connection string for hosts that need it before handing it to node-postgres.
+ *
+ * Supabase's servers present a certificate from Supabase's own CA. node-postgres treats
+ * `sslmode=require` as `verify-full`, which rejects that certificate, so for Supabase hosts
+ * we use libpq semantics instead: always encrypted, without verifying the CA. A URL that
+ * already sets `uselibpqcompat`, `sslrootcert`, or `sslmode=verify-full`/`disable` is left as is.
+ */
+export function connectionString(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  if (!/\.supabase\.(co|com)$/i.test(parsed.hostname)) return url;
+  const params = parsed.searchParams;
+  const mode = params.get("sslmode");
+  if (params.has("uselibpqcompat") || params.has("sslrootcert") || mode === "verify-full" || mode === "disable") return url;
+  params.set("sslmode", "require");
+  params.set("uselibpqcompat", "true");
+  return parsed.toString();
+}
+
+/**
  * Returns the shared database connection.
  *
  * - `DATABASE_URL` (or `POSTGRES_URL`) set → PostgreSQL via node-postgres (run `npm run db:migrate` on deploy).
@@ -40,13 +64,13 @@ async function connect(): Promise<DB> {
     const { drizzle } = await import("drizzle-orm/node-postgres");
     // Serverless functions each hold their own pool, so keep it small there.
     const defaultSize = process.env.VERCEL ? 3 : 10;
-    const pool = new Pool({ connectionString: url, max: Number(process.env.DATABASE_POOL_SIZE ?? defaultSize) });
+    const pool = new Pool({ connectionString: connectionString(url), max: Number(process.env.DATABASE_POOL_SIZE ?? defaultSize) });
     return drizzle(pool, { schema }) as unknown as DB;
   }
   if (process.env.VERCEL) {
     throw new Error(
       "No database configured. On Vercel the embedded database cannot be used: add a Postgres database " +
-        "(Storage → Neon) or set DATABASE_URL, then redeploy. See README → Deploy on Vercel.",
+        "(Storage → Neon or Supabase) or set DATABASE_URL, then redeploy. See README → Deploy on Vercel.",
     );
   }
 
@@ -71,7 +95,7 @@ export async function migratePostgres(url: string) {
   const { Pool } = await import("pg");
   const { drizzle } = await import("drizzle-orm/node-postgres");
   const { migrate } = await import("drizzle-orm/node-postgres/migrator");
-  const pool = new Pool({ connectionString: url, max: 1 });
+  const pool = new Pool({ connectionString: connectionString(url), max: 1 });
   try {
     await migrate(drizzle(pool), { migrationsFolder: MIGRATIONS_FOLDER });
   } finally {

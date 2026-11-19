@@ -86,7 +86,7 @@ npm run build && npm start
 
 Vercel's servers have no persistent disk, so the embedded database can't be used there; the app needs a hosted PostgreSQL database.
 
-1. In the Vercel project, open **Storage → Create Database → Neon** (free tier is fine) and connect it to the project. This sets `DATABASE_URL`. Any other PostgreSQL works too: set `DATABASE_URL` (or `POSTGRES_URL`) yourself.
+1. In the Vercel project, open **Storage → Create Database**, choose **Supabase** or **Neon** (free tiers are fine) and connect it to the project. This sets `POSTGRES_URL` (Supabase) or `DATABASE_URL` (Neon). Any other PostgreSQL works too: set `DATABASE_URL` yourself. With a Supabase project created outside Vercel, use the **Transaction pooler** connection string from **Connect** in the Supabase dashboard as `DATABASE_URL`.
 2. Under **Settings → Environment Variables**, add:
    - `AUTH_SECRET`: 32+ random characters (e.g. the output of `openssl rand -base64 48`).
    - `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`: the first admin account (password 10+ characters, not the example value).
@@ -94,6 +94,8 @@ Vercel's servers have no persistent disk, so the embedded database can't be used
 3. **Deployments → Redeploy.**
 
 During the build, `scripts/vercel-prepare.ts` (npm `prebuild`, active only on Vercel) checks these settings, applies migrations, creates the admin if missing and loads the sample questions into an empty bank. If something is missing, the build fails with a message saying what to add, and the previous deployment stays live. Login rate limiting is kept in memory, so on serverless it is per instance.
+
+Notes for Supabase: its servers use certificates from Supabase's own CA, which node-postgres rejects under `sslmode=require`, so for `*.supabase.co`/`*.supabase.com` hosts the app uses libpq semantics (`uselibpqcompat=true`: always encrypted, CA not verified). To verify the CA instead, add `sslmode=verify-full&sslrootcert=<path to Supabase's CA>` to the URL. Every table has row-level security enabled with no policies, so Supabase's auto-generated Data API can't read them; the app connects as the table owner and is unaffected. Free Supabase projects pause after a week without activity.
 
 AI grading runs right after the candidate submits (via Next.js `after()`), and again for exams that time out the next time staff open the dashboard or exam list. Engineers can also start it from the exam page.
 

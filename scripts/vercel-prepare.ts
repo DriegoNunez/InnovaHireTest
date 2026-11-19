@@ -12,8 +12,8 @@ const problems: string[] = [];
 const url = databaseUrl();
 if (!url) {
   problems.push(
-    "No database. In the Vercel project open Storage → Create Database → Neon (Postgres) and connect it to this project; " +
-      "it sets DATABASE_URL. Or set DATABASE_URL to any PostgreSQL connection string.",
+    "No database. In the Vercel project open Storage → Create Database → Supabase or Neon and connect it to this project " +
+      "(it sets POSTGRES_URL / DATABASE_URL). Or set DATABASE_URL to any PostgreSQL connection string.",
   );
 }
 if ((process.env.AUTH_SECRET ?? "").length < 32) {
